@@ -1,0 +1,32 @@
+{
+  "company": "Acme Manufacturing",
+  "location": {
+    "city": "Chennai",
+    "country": "India"
+  },
+  "production_lines": [
+    {
+      "id": "PL-01",
+      "name": "Assembly Line 1",
+      "status": "running",
+      "machines": [
+        {"id": "M-100", "type": "welder", "status": "ok"},
+        {"id": "M-101", "type": "press", "status": "maintenance"}
+      ]
+    },
+    {
+      "id": "PL-02",
+      "name": "Assembly Line 2",
+      "status": "stopped",
+      "machines": [
+        {"id": "M-200", "type": "welder", "status": "ok"}
+      ]
+    }
+  ],
+  "shift": {
+    "id": "S-1",
+    "supervisor": "R. Kumar",
+    "start": "08:00",
+    "end": "16:00"
+  }
+}
