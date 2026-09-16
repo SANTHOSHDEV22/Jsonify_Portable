@@ -1,46 +1,44 @@
-# --- Virtual environment ---
-# Never commit this — it's several hundred MB of installed packages.
-# Anyone cloning the repo recreates it with:
-#   python -m venv venv
-#   venv\Scripts\Activate.ps1
-#   pip install -r requirements.txt
-venv/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
 .venv/
+venv/
 env/
 
-# --- Python bytecode / cache ---
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
 
-# --- Visual Studio / Visual Studio Code project files ---
-# These are local IDE settings (paths, window layout, breakpoints) —
-# personal to your machine, not useful to anyone else on the repo.
+# Type checking
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# IDE
 .vs/
 .vscode/
-*.pyproj
-*.pyproj.user
-*.sln
+.idea/
 
-# --- PyInstaller / build output, if you ever package this as an .exe ---
+# Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build
 build/
 dist/
-*.spec
+*.egg-info/
 
-# --- OS-generated junk ---
-Thumbs.db
-Desktop.ini
+# OS
 .DS_Store
+Thumbs.db
 
-# --- Editor swap/backup files ---
-*.swp
-*~
-
-# --- The graph HTML this app writes at runtime ---
-# (Notify writes notify_graph_view.html to your OS temp folder when you
-# click "Open Graph in Browser" — that's outside the repo entirely, so
-# it won't show up here regardless, but if you ever test by writing one
-# into the project folder, ignore it too.)
-notify_graph_view.html
-test_graph.html
+# Temporary files
+*.tmp
+*.log
