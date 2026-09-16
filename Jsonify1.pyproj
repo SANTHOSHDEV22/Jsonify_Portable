@@ -25,6 +25,7 @@
     <Content Include="Jsonify.spec" />
     <Content Include="pyproject.toml" />
     <Content Include="requirements.txt" />
+    <Content Include="run_jsonify.cmd" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src\jsonify\core\models.py" />
