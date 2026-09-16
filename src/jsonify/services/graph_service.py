@@ -29,9 +29,7 @@ class GraphService:
                 when no directory is provided.
         """
         self._temp_directory = (
-            temp_directory
-            if temp_directory is not None
-            else Path(tempfile.gettempdir())
+            temp_directory if temp_directory is not None else Path(tempfile.gettempdir())
         )
 
     def get_temp_path(self) -> Path:

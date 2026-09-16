@@ -16,8 +16,7 @@ DEFAULT_WINDOW_HEIGHT = 900
 LEVEL_PLACEHOLDER = "-- choose key --"
 
 FILTERED_VIEW_PLACEHOLDER = (
-    "Pick a key at each level above, then click Show to display "
-    "the matching JSON hierarchy."
+    "Pick a key at each level above, then click Show to display the matching JSON hierarchy."
 )
 
 
@@ -41,9 +40,7 @@ MESSAGE_NO_GRAPH = "Load a JSON payload first."
 # Editor
 # ---------------------------------------------------------------------
 
-EDITOR_PLACEHOLDER = (
-    "Paste JSON payloads here, then click 'Load JSON'..."
-)
+EDITOR_PLACEHOLDER = "Paste JSON payloads here, then click 'Load JSON'..."
 
 MONOSPACE_FONT = "Consolas"
 

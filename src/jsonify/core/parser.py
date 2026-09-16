@@ -6,7 +6,6 @@ import json
 
 from jsonify.core.models import JSONValue
 
-
 _DECODER = json.JSONDecoder()
 _SEPARATORS = frozenset(" \t\r\n,")
 
@@ -59,10 +58,6 @@ def parse_multiple_json(raw_text: str) -> tuple[JSONValue, int]:
     if not documents:
         json.loads(raw_text)
 
-    result: JSONValue = (
-        documents[0]
-        if len(documents) == 1
-        else documents
-    )
+    result: JSONValue = documents[0] if len(documents) == 1 else documents
 
     return result, len(documents)

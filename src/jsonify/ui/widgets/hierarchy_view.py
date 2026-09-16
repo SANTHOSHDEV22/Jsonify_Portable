@@ -6,7 +6,6 @@ import json
 
 from jsonify.core.models import JSONValue
 
-
 _INDENT = "    "
 
 
@@ -46,9 +45,7 @@ def _append_hierarchy(
     indentation = _INDENT * depth
 
     if isinstance(value, dict):
-        lines.append(
-            f"{indentation}{label} {{"
-        )
+        lines.append(f"{indentation}{label} {{")
 
         for key, child_value in value.items():
             _append_hierarchy(
@@ -58,16 +55,12 @@ def _append_hierarchy(
                 label=str(key),
             )
 
-        lines.append(
-            f"{indentation}}}"
-        )
+        lines.append(f"{indentation}}}")
 
         return
 
     if isinstance(value, list):
-        lines.append(
-            f"{indentation}{label} ["
-        )
+        lines.append(f"{indentation}{label} [")
 
         for index, child_value in enumerate(value):
             _append_hierarchy(
@@ -77,16 +70,11 @@ def _append_hierarchy(
                 label=f"[{index}]",
             )
 
-        lines.append(
-            f"{indentation}]"
-        )
+        lines.append(f"{indentation}]")
 
         return
 
-    lines.append(
-        f"{indentation}{label}: "
-        f"{_format_primitive(value)}"
-    )
+    lines.append(f"{indentation}{label}: {_format_primitive(value)}")
 
 
 def _format_primitive(
@@ -104,11 +92,7 @@ def _format_primitive(
         return "null"
 
     if isinstance(value, bool):
-        return (
-            "true"
-            if value
-            else "false"
-        )
+        return "true" if value else "false"
 
     return str(value)
 
@@ -194,9 +178,7 @@ def _collect_values_for_key(
 
     if isinstance(node, dict):
         if key in node:
-            results.append(
-                node[key]
-            )
+            results.append(node[key])
 
         return
 
@@ -227,9 +209,7 @@ def build_path_filtered_hierarchy_text(
         Formatted matching JSON hierarchy.
     """
     if not path:
-        return build_hierarchy_text(
-            data
-        )
+        return build_hierarchy_text(data)
 
     matches = _resolve_path(
         data=data,
@@ -237,10 +217,7 @@ def build_path_filtered_hierarchy_text(
     )
 
     if not matches:
-        return (
-            "No values were found for path:\n\n"
-            + " → ".join(path)
-        )
+        return "No values were found for path:\n\n" + " → ".join(path)
 
     lines: list[str] = [
         f"Path: {' → '.join(path)}",
@@ -253,13 +230,9 @@ def build_path_filtered_hierarchy_text(
         start=1,
     ):
         if len(matches) > 1:
-            lines.append(
-                f"--- Match {index} ---"
-            )
+            lines.append(f"--- Match {index} ---")
 
-        lines.append(
-            build_hierarchy_text(value)
-        )
+        lines.append(build_hierarchy_text(value))
 
         if index < len(matches):
             lines.append("")

@@ -15,9 +15,7 @@ def graph_service(
 ) -> GraphService:
     """Create GraphService using pytest's temporary directory."""
 
-    return GraphService(
-        temp_directory=tmp_path
-    )
+    return GraphService(temp_directory=tmp_path)
 
 
 def test_get_temp_path(
@@ -28,10 +26,7 @@ def test_get_temp_path(
 
     result = graph_service.get_temp_path()
 
-    assert result == (
-        tmp_path
-        / "jsonify_graph_view.html"
-    )
+    assert result == (tmp_path / "jsonify_graph_view.html")
 
 
 def test_save_html(
@@ -52,9 +47,7 @@ def test_save_html(
 
     assert result.exists()
 
-    assert result.read_text(
-        encoding="utf-8"
-    ) == html
+    assert result.read_text(encoding="utf-8") == html
 
 
 def test_exists_before_save(
@@ -70,9 +63,7 @@ def test_exists_after_save(
 ) -> None:
     """Graph file should exist after saving."""
 
-    graph_service.save_html(
-        "<html></html>"
-    )
+    graph_service.save_html("<html></html>")
 
     assert graph_service.exists() is True
 
@@ -82,9 +73,7 @@ def test_delete(
 ) -> None:
     """GraphService should delete an existing graph file."""
 
-    graph_service.save_html(
-        "<html></html>"
-    )
+    graph_service.save_html("<html></html>")
 
     assert graph_service.exists() is True
 
@@ -110,19 +99,13 @@ def test_save_html_overwrites_existing_file(
 ) -> None:
     """Saving again should replace the previous graph HTML."""
 
-    graph_service.save_html(
-        "<html>first</html>"
-    )
+    graph_service.save_html("<html>first</html>")
 
-    graph_service.save_html(
-        "<html>second</html>"
-    )
+    graph_service.save_html("<html>second</html>")
 
     result = graph_service.get_temp_path()
 
-    assert result.read_text(
-        encoding="utf-8"
-    ) == "<html>second</html>"
+    assert result.read_text(encoding="utf-8") == "<html>second</html>"
 
 
 def test_save_html_rejects_non_string(

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem
 
 from jsonify.core.models import JSONValue
@@ -141,20 +139,12 @@ def _container_summary(
     if isinstance(value, dict):
         count = len(value)
 
-        return (
-            f"{count} key"
-            if count == 1
-            else f"{count} keys"
-        )
+        return f"{count} key" if count == 1 else f"{count} keys"
 
     if isinstance(value, list):
         count = len(value)
 
-        return (
-            f"{count} item"
-            if count == 1
-            else f"{count} items"
-        )
+        return f"{count} item" if count == 1 else f"{count} items"
 
     return _display_value(value)
 

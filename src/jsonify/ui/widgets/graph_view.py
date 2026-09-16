@@ -8,7 +8,6 @@ from typing import Any
 
 from jsonify.core.models import JSONValue
 
-
 NODE_WIDTH = 280
 NODE_HEADER_HEIGHT = 34
 NODE_ROW_HEIGHT = 26
@@ -30,10 +29,7 @@ def _load_d3_source() -> str:
     resource = files("jsonify.resources").joinpath("d3.min.js")
 
     if not resource.is_file():
-        raise FileNotFoundError(
-            "D3.js resource was not found at "
-            "'jsonify/resources/d3.min.js'."
-        )
+        raise FileNotFoundError("D3.js resource was not found at 'jsonify/resources/d3.min.js'.")
 
     return resource.read_text(encoding="utf-8")
 
@@ -128,7 +124,6 @@ def _build_graph_data(
 
         if isinstance(value, dict):
             for key, child in value.items():
-
                 if isinstance(child, (dict, list)):
                     rows.append(
                         {
@@ -151,7 +146,6 @@ def _build_graph_data(
 
         elif isinstance(value, list):
             for index, child in enumerate(value):
-
                 key = f"[{index}]"
 
                 if isinstance(child, (dict, list)):
@@ -203,9 +197,7 @@ def _build_graph_data(
             )
 
         if isinstance(value, dict):
-
             for key, child in value.items():
-
                 if isinstance(child, (dict, list)):
                     create_node(
                         value=child,
@@ -214,9 +206,7 @@ def _build_graph_data(
                     )
 
         elif isinstance(value, list):
-
             for index, child in enumerate(value):
-
                 if isinstance(child, (dict, list)):
                     create_node(
                         value=child,

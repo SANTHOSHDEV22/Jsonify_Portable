@@ -50,7 +50,6 @@ from jsonify.ui.widgets.tree_view import (
     populate_tree,
 )
 
-
 try:
     from PySide6.QtWebEngineWidgets import QWebEngineView
 
@@ -121,9 +120,7 @@ class MainWindow(QMainWindow):
 
         root_layout.setSpacing(0)
 
-        root_layout.addWidget(
-            self._create_control_bar()
-        )
+        root_layout.addWidget(self._create_control_bar())
 
         root_layout.addWidget(
             self._create_split_view(),
@@ -139,13 +136,9 @@ class MainWindow(QMainWindow):
 
         control_bar = QWidget()
 
-        control_bar.setObjectName(
-            "controlBar"
-        )
+        control_bar.setObjectName("controlBar")
 
-        layout = QHBoxLayout(
-            control_bar
-        )
+        layout = QHBoxLayout(control_bar)
 
         layout.setContentsMargins(
             10,
@@ -158,17 +151,11 @@ class MainWindow(QMainWindow):
 
         layout.addStretch(1)
 
-        self._load_button = QPushButton(
-            "▶ LOAD JSON"
-        )
+        self._load_button = QPushButton("▶ LOAD JSON")
 
-        self._load_button.clicked.connect(
-            self._load_json
-        )
+        self._load_button.clicked.connect(self._load_json)
 
-        layout.addWidget(
-            self._load_button
-        )
+        layout.addWidget(self._load_button)
 
         return control_bar
 
@@ -179,17 +166,11 @@ class MainWindow(QMainWindow):
     def _create_split_view(self) -> QSplitter:
         """Create the editor/viewer split layout."""
 
-        splitter = QSplitter(
-            Qt.Orientation.Horizontal
-        )
+        splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        splitter.addWidget(
-            self._create_editor_panel()
-        )
+        splitter.addWidget(self._create_editor_panel())
 
-        splitter.addWidget(
-            self._create_viewer_panel()
-        )
+        splitter.addWidget(self._create_viewer_panel())
 
         splitter.setStretchFactor(
             0,
@@ -201,9 +182,7 @@ class MainWindow(QMainWindow):
             1,
         )
 
-        splitter.setSizes(
-            [700, 700]
-        )
+        splitter.setSizes([700, 700])
 
         return splitter
 
@@ -216,9 +195,7 @@ class MainWindow(QMainWindow):
 
         panel = QWidget()
 
-        layout = QVBoxLayout(
-            panel
-        )
+        layout = QVBoxLayout(panel)
 
         layout.setContentsMargins(
             6,
@@ -227,23 +204,15 @@ class MainWindow(QMainWindow):
             6,
         )
 
-        layout.addWidget(
-            QLabel("JSON Editor")
-        )
+        layout.addWidget(QLabel("JSON Editor"))
 
         self._editor = QPlainTextEdit()
 
-        self._editor.setPlaceholderText(
-            EDITOR_PLACEHOLDER
-        )
+        self._editor.setPlaceholderText(EDITOR_PLACEHOLDER)
 
-        self._editor.setTabStopDistance(
-            20
-        )
+        self._editor.setTabStopDistance(20)
 
-        layout.addWidget(
-            self._editor
-        )
+        layout.addWidget(self._editor)
 
         return panel
 
@@ -256,9 +225,7 @@ class MainWindow(QMainWindow):
 
         panel = QWidget()
 
-        layout = QVBoxLayout(
-            panel
-        )
+        layout = QVBoxLayout(panel)
 
         layout.setContentsMargins(
             6,
@@ -267,9 +234,7 @@ class MainWindow(QMainWindow):
             6,
         )
 
-        layout.addWidget(
-            QLabel("Viewer")
-        )
+        layout.addWidget(QLabel("Viewer"))
 
         self._view_tabs = QTabWidget()
 
@@ -286,9 +251,7 @@ class MainWindow(QMainWindow):
             "Graph View",
         )
 
-        layout.addWidget(
-            self._view_tabs
-        )
+        layout.addWidget(self._view_tabs)
 
         return panel
 
@@ -299,9 +262,7 @@ class MainWindow(QMainWindow):
     def _create_tree_tab(self) -> None:
         """Create the normal JSON tree view."""
 
-        self._tree_widget = (
-            create_tree_widget()
-        )
+        self._tree_widget = create_tree_widget()
 
         self._view_tabs.addTab(
             self._tree_widget,
@@ -315,23 +276,15 @@ class MainWindow(QMainWindow):
     def _create_hierarchy_tab(self) -> None:
         """Create the text hierarchy view."""
 
-        self._hierarchy_view = (
-            QPlainTextEdit()
-        )
+        self._hierarchy_view = QPlainTextEdit()
 
-        self._hierarchy_view.setReadOnly(
-            True
-        )
+        self._hierarchy_view.setReadOnly(True)
 
         font = self._hierarchy_view.font()
 
-        font.setFamily(
-            MONOSPACE_FONT
-        )
+        font.setFamily(MONOSPACE_FONT)
 
-        self._hierarchy_view.setFont(
-            font
-        )
+        self._hierarchy_view.setFont(font)
 
         self._view_tabs.addTab(
             self._hierarchy_view,
@@ -347,9 +300,7 @@ class MainWindow(QMainWindow):
 
         container = QWidget()
 
-        container_layout = QVBoxLayout(
-            container
-        )
+        container_layout = QVBoxLayout(container)
 
         container_layout.setContentsMargins(
             0,
@@ -362,9 +313,7 @@ class MainWindow(QMainWindow):
 
         levels_row = QWidget()
 
-        self._levels_layout = QHBoxLayout(
-            levels_row
-        )
+        self._levels_layout = QHBoxLayout(levels_row)
 
         self._levels_layout.setContentsMargins(
             8,
@@ -375,51 +324,29 @@ class MainWindow(QMainWindow):
 
         self._levels_layout.setSpacing(6)
 
-        self._levels_layout.addWidget(
-            QLabel("Drill into:")
-        )
+        self._levels_layout.addWidget(QLabel("Drill into:"))
 
-        self._show_filtered_button = (
-            QPushButton("Show")
-        )
+        self._show_filtered_button = QPushButton("Show")
 
-        self._show_filtered_button.clicked.connect(
-            self._show_filtered
-        )
+        self._show_filtered_button.clicked.connect(self._show_filtered)
 
-        self._levels_layout.addWidget(
-            self._show_filtered_button
-        )
+        self._levels_layout.addWidget(self._show_filtered_button)
 
-        self._levels_layout.addStretch(
-            1
-        )
+        self._levels_layout.addStretch(1)
 
-        container_layout.addWidget(
-            levels_row
-        )
+        container_layout.addWidget(levels_row)
 
-        self._filtered_view = (
-            QPlainTextEdit()
-        )
+        self._filtered_view = QPlainTextEdit()
 
-        self._filtered_view.setReadOnly(
-            True
-        )
+        self._filtered_view.setReadOnly(True)
 
         font = self._filtered_view.font()
 
-        font.setFamily(
-            MONOSPACE_FONT
-        )
+        font.setFamily(MONOSPACE_FONT)
 
-        self._filtered_view.setFont(
-            font
-        )
+        self._filtered_view.setFont(font)
 
-        self._filtered_view.setPlainText(
-            FILTERED_VIEW_PLACEHOLDER
-        )
+        self._filtered_view.setPlainText(FILTERED_VIEW_PLACEHOLDER)
 
         container_layout.addWidget(
             self._filtered_view,
@@ -437,9 +364,7 @@ class MainWindow(QMainWindow):
 
         container = QWidget()
 
-        layout = QVBoxLayout(
-            container
-        )
+        layout = QVBoxLayout(container)
 
         layout.setContentsMargins(
             0,
@@ -451,14 +376,10 @@ class MainWindow(QMainWindow):
         layout.setSpacing(4)
 
         if HAS_WEBENGINE:
-            self._create_embedded_graph_view(
-                layout
-            )
+            self._create_embedded_graph_view(layout)
 
         else:
-            self._create_graph_fallback(
-                layout
-            )
+            self._create_graph_fallback(layout)
 
         return container
 
@@ -470,9 +391,7 @@ class MainWindow(QMainWindow):
 
         controls = QWidget()
 
-        controls_layout = QHBoxLayout(
-            controls
-        )
+        controls_layout = QHBoxLayout(controls)
 
         controls_layout.setContentsMargins(
             8,
@@ -481,29 +400,17 @@ class MainWindow(QMainWindow):
             0,
         )
 
-        controls_layout.addWidget(
-            QLabel(
-                "If the graph does not render:"
-            )
-        )
+        controls_layout.addWidget(QLabel("If the graph does not render:"))
 
-        open_button = QPushButton(
-            "Open Graph in Browser"
-        )
+        open_button = QPushButton("Open Graph in Browser")
 
-        open_button.clicked.connect(
-            self._open_graph_in_browser
-        )
+        open_button.clicked.connect(self._open_graph_in_browser)
 
-        controls_layout.addWidget(
-            open_button
-        )
+        controls_layout.addWidget(open_button)
 
         controls_layout.addStretch(1)
 
-        layout.addWidget(
-            controls
-        )
+        layout.addWidget(controls)
 
         self._graph_view = QWebEngineView()
 
@@ -526,25 +433,15 @@ class MainWindow(QMainWindow):
             "in your default browser."
         )
 
-        message.setWordWrap(
-            True
-        )
+        message.setWordWrap(True)
 
-        layout.addWidget(
-            message
-        )
+        layout.addWidget(message)
 
-        open_button = QPushButton(
-            "Open Graph in Browser"
-        )
+        open_button = QPushButton("Open Graph in Browser")
 
-        open_button.clicked.connect(
-            self._open_graph_in_browser
-        )
+        open_button.clicked.connect(self._open_graph_in_browser)
 
-        layout.addWidget(
-            open_button
-        )
+        layout.addWidget(open_button)
 
         layout.addStretch(1)
 
@@ -555,11 +452,7 @@ class MainWindow(QMainWindow):
     def _load_json(self) -> None:
         """Parse editor content and refresh all views."""
 
-        raw_text = (
-            self._editor
-            .toPlainText()
-            .strip()
-        )
+        raw_text = self._editor.toPlainText().strip()
 
         if not raw_text:
             QMessageBox.warning(
@@ -574,9 +467,7 @@ class MainWindow(QMainWindow):
             (
                 self._payload,
                 self._document_count,
-            ) = self._json_service.parse_multiple(
-                raw_text
-            )
+            ) = self._json_service.parse_multiple(raw_text)
 
         except json.JSONDecodeError as exc:
             QMessageBox.critical(
@@ -615,13 +506,9 @@ class MainWindow(QMainWindow):
     def _refresh_hierarchy_view(self) -> None:
         """Refresh hierarchy text visualization."""
 
-        hierarchy = build_hierarchy_text(
-            self._payload
-        )
+        hierarchy = build_hierarchy_text(self._payload)
 
-        self._hierarchy_view.setPlainText(
-            hierarchy
-        )
+        self._hierarchy_view.setPlainText(hierarchy)
 
     def _refresh_graph_view(self) -> None:
         """Generate and display the graph visualization."""
@@ -629,19 +516,12 @@ class MainWindow(QMainWindow):
         if self._payload is None:
             return
 
-        html = build_graph_html(
-            self._payload
-        )
+        html = build_graph_html(self._payload)
 
         self._last_graph_html = html
 
-        if (
-            HAS_WEBENGINE
-            and self._graph_view is not None
-        ):
-            self._graph_view.setHtml(
-                html
-            )
+        if HAS_WEBENGINE and self._graph_view is not None:
+            self._graph_view.setHtml(html)
 
     # -----------------------------------------------------------------
     # Filter levels
@@ -651,17 +531,13 @@ class MainWindow(QMainWindow):
         """Reset filtered-view dropdowns."""
 
         for combo in self._level_combos:
-            self._levels_layout.removeWidget(
-                combo
-            )
+            self._levels_layout.removeWidget(combo)
 
             combo.deleteLater()
 
         self._level_combos.clear()
 
-        self._filtered_view.setPlainText(
-            FILTERED_VIEW_PLACEHOLDER
-        )
+        self._filtered_view.setPlainText(FILTERED_VIEW_PLACEHOLDER)
 
         if self._payload is None:
             return
@@ -672,9 +548,7 @@ class MainWindow(QMainWindow):
         )
 
         if first_level_keys:
-            self._add_level_combo(
-                first_level_keys
-            )
+            self._add_level_combo(first_level_keys)
 
     def _add_level_combo(
         self,
@@ -684,33 +558,22 @@ class MainWindow(QMainWindow):
 
         combo = QComboBox()
 
-        combo.addItem(
-            LEVEL_PLACEHOLDER
-        )
+        combo.addItem(LEVEL_PLACEHOLDER)
 
-        combo.addItems(
-            keys
-        )
+        combo.addItems(keys)
 
         combo.currentIndexChanged.connect(
-            lambda _index, current=combo:
-            self._on_level_changed(current)
+            lambda _index, current=combo: self._on_level_changed(current)
         )
 
-        button_index = (
-            self._levels_layout.indexOf(
-                self._show_filtered_button
-            )
-        )
+        button_index = self._levels_layout.indexOf(self._show_filtered_button)
 
         self._levels_layout.insertWidget(
             button_index,
             combo,
         )
 
-        self._level_combos.append(
-            combo
-        )
+        self._level_combos.append(combo)
 
     def _current_filter_path(
         self,
@@ -720,20 +583,12 @@ class MainWindow(QMainWindow):
         path: list[str] = []
 
         for combo in self._level_combos:
-            selected_key = (
-                combo.currentText()
-            )
+            selected_key = combo.currentText()
 
-            if (
-                not selected_key
-                or selected_key
-                == LEVEL_PLACEHOLDER
-            ):
+            if not selected_key or selected_key == LEVEL_PLACEHOLDER:
                 break
 
-            path.append(
-                selected_key
-            )
+            path.append(selected_key)
 
         return path
 
@@ -746,28 +601,16 @@ class MainWindow(QMainWindow):
         if combo not in self._level_combos:
             return
 
-        index = self._level_combos.index(
-            combo
-        )
+        index = self._level_combos.index(combo)
 
-        stale_combos = (
-            self._level_combos[
-                index + 1:
-            ]
-        )
+        stale_combos = self._level_combos[index + 1 :]
 
         for stale_combo in stale_combos:
-            self._levels_layout.removeWidget(
-                stale_combo
-            )
+            self._levels_layout.removeWidget(stale_combo)
 
             stale_combo.deleteLater()
 
-        self._level_combos = (
-            self._level_combos[
-                : index + 1
-            ]
-        )
+        self._level_combos = self._level_combos[: index + 1]
 
         path = self._current_filter_path()
 
@@ -783,9 +626,7 @@ class MainWindow(QMainWindow):
         )
 
         if next_keys:
-            self._add_level_combo(
-                next_keys
-            )
+            self._add_level_combo(next_keys)
 
     def _show_filtered(self) -> None:
         """Render JSON matching the selected hierarchy path."""
@@ -801,16 +642,12 @@ class MainWindow(QMainWindow):
 
         path = self._current_filter_path()
 
-        result = (
-            build_path_filtered_hierarchy_text(
-                self._payload,
-                path,
-            )
+        result = build_path_filtered_hierarchy_text(
+            self._payload,
+            path,
         )
 
-        self._filtered_view.setPlainText(
-            result
-        )
+        self._filtered_view.setPlainText(result)
 
     # -----------------------------------------------------------------
     # Graph browser fallback
@@ -828,14 +665,6 @@ class MainWindow(QMainWindow):
 
             return
 
-        graph_path = (
-            self._graph_service.save_html(
-                self._last_graph_html
-            )
-        )
+        graph_path = self._graph_service.save_html(self._last_graph_html)
 
-        QDesktopServices.openUrl(
-            QUrl.fromLocalFile(
-                str(graph_path)
-            )
-        )
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(graph_path)))

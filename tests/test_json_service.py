@@ -88,9 +88,7 @@ def test_parse_multiple(
     {"company": "C"}
     """
 
-    result, document_count = service.parse_multiple(
-        raw_json
-    )
+    result, document_count = service.parse_multiple(raw_json)
 
     assert document_count == 3
 
@@ -107,9 +105,7 @@ def test_get_unique_keys(
 ) -> None:
     """JsonService should return unique keys."""
 
-    result = service.get_unique_keys(
-        sample_payload
-    )
+    result = service.get_unique_keys(sample_payload)
 
     assert result == [
         "active",
@@ -181,9 +177,7 @@ def test_get_stats(
 ) -> None:
     """JsonService should return JSON statistics."""
 
-    result = service.get_stats(
-        sample_payload
-    )
+    result = service.get_stats(sample_payload)
 
     assert result["objects"] == 4
     assert result["arrays"] == 2
