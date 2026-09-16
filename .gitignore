@@ -1,5 +1,5 @@
 # ============================================================
-# Jsonify - Git Ignore
+# Jsonify - .gitignore
 # ============================================================
 
 
@@ -10,9 +10,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyc
-*.pyo
-*.pyd
 
 
 # ------------------------------------------------------------
@@ -52,8 +49,6 @@ MANIFEST
 
 # ------------------------------------------------------------
 # Editable installation metadata
-# Example:
-# src/jsonify.egg-info/
 # ------------------------------------------------------------
 
 src/*.egg-info/
@@ -61,10 +56,11 @@ src/**/*.egg-info/
 
 
 # ------------------------------------------------------------
-# Pytest
+# Testing / coverage
 # ------------------------------------------------------------
 
 .pytest_cache/
+
 .coverage
 .coverage.*
 coverage.xml
@@ -97,11 +93,19 @@ dmypy.json
 
 
 # ------------------------------------------------------------
-# Type checking / tooling caches
+# Other type-checking / tooling caches
 # ------------------------------------------------------------
 
 .pytype/
 .pyre/
+
+
+# ------------------------------------------------------------
+# Tox / Nox
+# ------------------------------------------------------------
+
+.tox/
+.nox/
 
 
 # ------------------------------------------------------------
@@ -118,7 +122,6 @@ dmypy.json
 
 # ------------------------------------------------------------
 # Visual Studio Code
-# Keep this even if Visual Studio is currently used.
 # ------------------------------------------------------------
 
 .vscode/
@@ -148,7 +151,7 @@ $RECYCLE.BIN/
 .AppleDouble
 .LSOverride
 
-# Linux
+# Linux / editor backups
 *~
 
 
@@ -182,19 +185,40 @@ logs/
 .env.*
 !.env.example
 
-*.pem
+
+# ------------------------------------------------------------
+# Licensing - PRIVATE / SECRET
+# ------------------------------------------------------------
+#
+# NEVER commit:
+# - Private signing keys
+# - Generated customer licenses
+#
+# The Jsonify PUBLIC verification key is intentionally allowed
+# because it must be distributed with the application.
+# ------------------------------------------------------------
+
 *.key
+
+*.private.pem
+license_private.pem
+
+licenses/
+*.jsonify-license
+
+# Ignore PEM files by default.
+*.pem
+
+# Allow Jsonify's public verification key.
+!src/jsonify/resources/license_public.pem
 
 
 # ------------------------------------------------------------
-# Python test / profiling output
+# Python profiling output
 # ------------------------------------------------------------
 
 .prof
 *.prof
-
-.tox/
-.nox/
 
 
 # ------------------------------------------------------------
@@ -221,6 +245,22 @@ jsonify_graph_view.html
 
 
 # ------------------------------------------------------------
+# Generated exports
+# ------------------------------------------------------------
+
+output/
+outputs/
+exports/
+
+
+# ------------------------------------------------------------
+# Saved local Jsonify sessions
+# ------------------------------------------------------------
+
+*.jsonify
+
+
+# ------------------------------------------------------------
 # Backup / archive files
 # ------------------------------------------------------------
 
@@ -232,13 +272,35 @@ jsonify_graph_view.html
 
 
 # ------------------------------------------------------------
-# Local application artifacts
+# PyInstaller temporary/build artifacts
 # ------------------------------------------------------------
 
-output/
-outputs/
+*.toc
+*.pyz
+*.pkg
 
 
 # ------------------------------------------------------------
-# End of Jsonify .gitignore
+# Inno Setup generated installer output
 # ------------------------------------------------------------
+
+installer-output/
+
+
+# ============================================================
+# IMPORTANT FILES THAT SHOULD REMAIN TRACKED
+# ============================================================
+#
+# pyproject.toml
+# requirements.txt
+# Jsonify.spec
+# README.md
+#
+# src/jsonify/resources/d3.min.js
+# src/jsonify/resources/jsonify.png
+# src/jsonify/resources/license_public.pem
+#
+# tools/generate_license_keys.py
+# tools/issue_license.py
+#
+# ============================================================

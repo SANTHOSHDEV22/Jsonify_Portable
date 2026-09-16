@@ -37,7 +37,12 @@ datas = collect_data_files(
 
 datas += [
     (
-        str(src_dir / "jsonify" / "resources" / "d3.min.js"),
+        str(
+            src_dir
+            / "jsonify"
+            / "resources"
+            / "license_public.pem"
+        ),
         "jsonify/resources",
     ),
 ]
