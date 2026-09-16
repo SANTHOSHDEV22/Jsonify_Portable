@@ -1,18 +1,36 @@
+# ============================================================
+# Jsonify - Project Configuration
+# ============================================================
+
+
+# ------------------------------------------------------------
+# Build system
+# ------------------------------------------------------------
+
 [build-system]
 requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 
+# ------------------------------------------------------------
+# Project metadata
+# ------------------------------------------------------------
+
 [project]
 name = "jsonify"
 version = "1.0.0"
 description = "Desktop application for exploring and visualizing JSON payloads"
+readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
     "PySide6>=6.6",
 ]
 
+
+# ------------------------------------------------------------
+# Optional development dependencies
+# ------------------------------------------------------------
 
 [project.optional-dependencies]
 dev = [
@@ -23,23 +41,131 @@ dev = [
 ]
 
 
+# ------------------------------------------------------------
+# Command-line application entry point
+#
+# Allows the application to be started using:
+#
+#   jsonify
+#
+# instead of:
+#
+#   python -m jsonify
+# ------------------------------------------------------------
+
 [project.scripts]
 jsonify = "jsonify.__main__:main"
 
+
+# ------------------------------------------------------------
+# Setuptools package discovery
+#
+# Python packages are located under:
+#
+#   src/jsonify/
+# ------------------------------------------------------------
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 
+# ------------------------------------------------------------
+# Package data
+#
+# Include the bundled D3.js file when Jsonify is packaged.
+# This is IMPORTANT because Graph View loads:
+#
+#   jsonify/resources/d3.min.js
+# ------------------------------------------------------------
+
+[tool.setuptools.package-data]
+"jsonify.resources" = ["*.js"]
+
+
+# ------------------------------------------------------------
+# Pytest configuration
+# ------------------------------------------------------------
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = [
+    "-ra",
+]
 
+
+# ------------------------------------------------------------
+# Coverage configuration
+# ------------------------------------------------------------
+
+[tool.coverage.run]
+source = ["jsonify"]
+branch = true
+
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+
+# ------------------------------------------------------------
+# Ruff configuration
+# ------------------------------------------------------------
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+src = ["src", "tests"]
 
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # Pyflakes
+    "I",      # import sorting
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+]
+
+ignore = []
+
+
+# ------------------------------------------------------------
+# Ruff formatter
+# ------------------------------------------------------------
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+
+# ------------------------------------------------------------
+# Mypy configuration
+# ------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.12"
+
+files = [
+    "src/jsonify",
+]
+
+strict = true
+
+warn_return_any = true
+warn_unused_configs = true
+warn_unreachable = true
+
+show_error_codes = true
+pretty = true
+
+
+# ------------------------------------------------------------
+# End of Jsonify configuration
+# ------------------------------------------------------------

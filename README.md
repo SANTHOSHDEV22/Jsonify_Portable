@@ -1,106 +1,632 @@
-# Notify — JSON Payload Viewer
+# Jsonify
 
-A desktop app (PySide6/Qt) to paste a JSON payload and explore it as a
-filterable key browser, an interactive tree, a plain-text hierarchy
-outline, and a jsoncrack.com-style node-link graph — all in one
-maximized window titled **Notify**.
+Jsonify is a desktop application for viewing, exploring, filtering, and visualizing JSON payloads.
 
-## Project layout
+The application is built with Python and PySide6 and provides multiple ways to inspect complex and deeply nested JSON data, including tree, hierarchy, filtered, and interactive graph views.
 
+---
+
+## Features
+
+### JSON Parsing
+
+- Parse standard JSON documents.
+- Parse nested JSON objects and arrays.
+- Support multiple consecutive JSON documents.
+- Display useful validation errors for invalid JSON payloads.
+
+Example:
+
+```json
+{
+  "company": "Example Company",
+  "departments": [
+    {
+      "name": "Engineering",
+      "members": [
+        {
+          "name": "Alice",
+          "active": true
+        }
+      ]
+    }
+  ]
+}
 ```
-notify_app/
-├── main.py                  # entry point — launches Notify maximized
-├── json_utils.py             # parse_json, extract_unique_keys, find_values_by_key, json_stats
-├── ui/
-│   └── main_window.py         # MainWindow: control bar, filter panel, split editor/viewer
-├── widgets/
-│   ├── tree_view.py            # QTreeWidget builder (Tree View tab)
-│   ├── hierarchy_view.py       # indented text outline (Hierarchy View tab)
-│   └── graph_view.py           # jsoncrack-style HTML graph via pyvis (Graph View tab)
-├── sample.json                # example payload to try the app with
+
+Jsonify also supports multiple consecutive JSON documents:
+
+```json
+{"company": "Company A"}
+{"company": "Company B"}
+{"company": "Company C"}
+```
+
+---
+
+## Views
+
+Jsonify provides four ways to inspect a loaded JSON payload.
+
+### Normal View
+
+Displays the JSON structure using an expandable tree.
+
+Each entry shows:
+
+- Key or array index
+- Value
+- JSON data type
+
+This view is useful for quickly navigating nested objects and arrays.
+
+### Hierarchy View
+
+Displays the complete JSON structure as formatted hierarchical text.
+
+This is useful when the relationship between nested objects needs to be inspected without manually expanding tree nodes.
+
+### Filtered View
+
+Allows JSON structures to be explored by selecting keys level by level.
+
+The available keys are dynamically determined from the currently selected hierarchy path.
+
+This makes it easier to inspect specific portions of large JSON documents.
+
+### Graph View
+
+Displays the JSON hierarchy as an interactive graph.
+
+The graph is rendered using D3.js and supports:
+
+- Zoom in
+- Zoom out
+- Mouse-wheel zoom
+- Pan
+- Reset view
+- Fit entire graph
+- Parent-child relationship visualization
+
+D3.js is bundled locally with the application, allowing the graph to work without requiring an internet connection.
+
+---
+
+## Technology Stack
+
+- Python
+- PySide6
+- Qt
+- D3.js
+- HTML
+- CSS
+- JavaScript
+- pytest
+
+---
+
+## Project Structure
+
+```text
+Jsonify/
+│
+├── src/
+│   └── jsonify/
+│       │
+│       ├── __init__.py
+│       ├── __main__.py
+│       │
+│       ├── core/
+│       │   ├── __init__.py
+│       │   ├── models.py
+│       │   ├── parser.py
+│       │   └── traversal.py
+│       │
+│       ├── resources/
+│       │   ├── __init__.py
+│       │   └── d3.min.js
+│       │
+│       ├── services/
+│       │   ├── __init__.py
+│       │   ├── graph_service.py
+│       │   └── json_service.py
+│       │
+│       └── ui/
+│           ├── __init__.py
+│           ├── constants.py
+│           ├── main_window.py
+│           │
+│           └── widgets/
+│               ├── __init__.py
+│               ├── graph_view.py
+│               ├── hierarchy_view.py
+│               └── tree_view.py
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_parser.py
+│   ├── test_traversal.py
+│   ├── test_json_service.py
+│   └── test_graph_service.py
+│
+├── .gitignore
+├── README.md
+├── pyproject.toml
 └── requirements.txt
 ```
 
-## Setup
+---
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+## Architecture
+
+Jsonify follows a layered structure that separates JSON processing, application services, user-interface logic, and static resources.
+
+```text
+┌─────────────────────────────────────┐
+│              UI Layer               │
+│                                     │
+│  MainWindow                         │
+│  Tree View                          │
+│  Hierarchy View                     │
+│  Filtered View                      │
+│  Graph View                         │
+└──────────────────┬──────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────┐
+│           Service Layer             │
+│                                     │
+│  JsonService                        │
+│  GraphService                       │
+└──────────────────┬──────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────┐
+│             Core Layer              │
+│                                     │
+│  Parser                             │
+│  Traversal                          │
+│  Models                             │
+└─────────────────────────────────────┘
+
+        Static Resources
+               │
+               ▼
+          d3.min.js
 ```
 
-`PySide6` bundles Qt's WebEngine module on most platforms, which is
-what renders the interactive graph in-app. If your environment doesn't
-have it, the app still works — the Graph View tab shows an **"Open
-Graph in Browser"** button instead of an embedded view.
+### Core Layer
 
-## Run
+The `core` package contains JSON-related logic that does not depend on the graphical user interface.
 
-```bash
-python main.py
+#### `models.py`
+
+Defines shared JSON type aliases used throughout the application.
+
+#### `parser.py`
+
+Handles JSON parsing, including support for multiple consecutive JSON documents.
+
+#### `traversal.py`
+
+Contains recursive JSON operations including:
+
+- Unique-key extraction
+- Key searching
+- JSON path generation
+- JSON statistics
+
+### Service Layer
+
+The `services` package provides application-level operations between the core functionality and the UI.
+
+#### `json_service.py`
+
+Provides high-level JSON operations used by the application.
+
+#### `graph_service.py`
+
+Handles generated graph HTML files, including temporary file creation and cleanup.
+
+### UI Layer
+
+The `ui` package contains PySide6 user-interface components.
+
+#### `main_window.py`
+
+Contains the main application window and coordinates interactions between the editor, services, and visualization components.
+
+#### `widgets/tree_view.py`
+
+Creates and populates the expandable JSON tree.
+
+#### `widgets/hierarchy_view.py`
+
+Generates hierarchy and filtered hierarchy representations.
+
+#### `widgets/graph_view.py`
+
+Transforms JSON structures into graph data and generates the interactive D3.js visualization.
+
+### Resources
+
+Static resources required by the application are stored separately from Python source code.
+
+```text
+resources/
+├── __init__.py
+└── d3.min.js
 ```
 
-The window opens **maximized**, titled **Notify**, with your OS's
-normal minimize / maximize-restore / close buttons in the title bar
-(these come for free from Qt — no extra code needed for them).
+The bundled D3.js resource allows graph visualization without downloading D3 at runtime.
 
-## Layout, top to bottom
+---
 
-1. **Control bar** (Notepad++-style strip):
-   - `Filter by key:` dropdown — auto-populated with every unique key
-     found anywhere in the loaded payload (however deeply nested).
-   - `Clear Filter` — resets the dropdown and empties the results panel.
-   - `▶ Load / Parse JSON` — parses whatever's in the editor pane below.
+## Requirements
 
-2. **Filter results panel** — appears right under the control bar.
-   When you pick a key, this shows **every occurrence** of that key in
-   the payload, each with a JSONPath (e.g.
-   `$.production_lines[0].machines[1].status`) so you know exactly
-   where it came from.
+Python 3.12 or later is recommended.
 
-3. **Split view** (vertical divider — drag to resize):
-   - **Left — JSON Editor**: paste your payload here.
-   - **Right — Viewer**, three tabs:
-     - 🌳 **Tree View** — expandable/collapsible QTreeWidget, Key/Value columns.
-     - 📂 **Hierarchy View** — plain-text Unicode-box-drawing outline (`├──`, `└──`), easy to scan or copy out.
-     - 🕸️ **Graph View (jsoncrack-style)** — physics-based node-link diagram: purple boxes = objects, blue boxes = arrays, green ellipses = leaf values. Drag nodes, scroll to zoom.
+The primary application dependency is:
 
-## Try it
+```text
+PySide6
+```
 
-1. Run `python main.py`.
-2. Paste the contents of `sample.json` into the left editor pane (or
-   open it and copy/paste).
-3. Click **▶ Load / Parse JSON**.
-4. Pick `status` from the **Filter by key** dropdown — you'll see all
-   5 occurrences across the payload, each with its path.
-5. Click **Clear Filter** to go back.
-6. Switch between the Tree / Hierarchy / Graph tabs on the right to
-   see the same payload three different ways.
+Development dependencies include:
+
+```text
+pytest
+pytest-cov
+ruff
+mypy
+```
+
+---
+
+## Installation
+
+Clone the repository:
+
+```powershell
+git clone <repository-url>
+```
+
+Move into the project directory:
+
+```powershell
+cd Jsonify
+```
+
+Create a virtual environment:
+
+```powershell
+python -m venv venv
+```
+
+Activate the virtual environment in PowerShell:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+Upgrade pip:
+
+```powershell
+python -m pip install --upgrade pip
+```
+
+Install Jsonify in editable mode:
+
+```powershell
+python -m pip install -e .
+```
+
+For development, install the optional development dependencies:
+
+```powershell
+python -m pip install -e ".[dev]"
+```
+
+---
+
+## Running the Application
+
+After installation, start Jsonify with:
+
+```powershell
+python -m jsonify
+```
+
+If the project script entry point is installed, it can also be started with:
+
+```powershell
+jsonify
+```
+
+---
+
+## Using Jsonify
+
+Start the application:
+
+```powershell
+python -m jsonify
+```
+
+Paste a JSON payload into the **JSON Editor**.
+
+Click:
+
+```text
+Load JSON
+```
+
+After the JSON has been parsed successfully, use the available viewer tabs:
+
+```text
+Normal View
+Hierarchy View
+Filtered View
+Graph View
+```
+
+---
+
+## Graph Controls
+
+The Graph View provides several navigation controls.
+
+### Zoom In
+
+```text
++
+```
+
+Increases the graph zoom level.
+
+### Zoom Out
+
+```text
+-
+```
+
+Decreases the graph zoom level.
+
+### Reset
+
+```text
+Reset
+```
+
+Returns the graph to its default readable zoom and starting position.
+
+### Fit
+
+```text
+Fit
+```
+
+Fits the entire graph into the available viewport.
+
+For large JSON documents, the Fit operation may intentionally display nodes at a smaller scale so that the complete hierarchy is visible.
+
+The graph can also be panned and zoomed interactively.
+
+---
+
+## Running Tests
+
+Run the complete test suite:
+
+```powershell
+python -m pytest
+```
+
+Run tests with detailed output:
+
+```powershell
+python -m pytest -v
+```
+
+Run tests with coverage:
+
+```powershell
+python -m pytest --cov=jsonify --cov-report=term-missing
+```
+
+Generate an HTML coverage report:
+
+```powershell
+python -m pytest --cov=jsonify --cov-report=html
+```
+
+The generated report will be available under:
+
+```text
+htmlcov/
+```
+
+---
+
+## Code Quality
+
+### Ruff
+
+Run the Ruff linter:
+
+```powershell
+python -m ruff check .
+```
+
+Automatically fix supported issues:
+
+```powershell
+python -m ruff check . --fix
+```
+
+Check formatting:
+
+```powershell
+python -m ruff format --check .
+```
+
+Format the project:
+
+```powershell
+python -m ruff format .
+```
+
+### Mypy
+
+Run static type checking:
+
+```powershell
+python -m mypy src/jsonify
+```
+
+---
+
+## Development Workflow
+
+A typical development workflow is:
+
+```powershell
+git pull
+
+.\venv\Scripts\Activate.ps1
+
+python -m pip install -e ".[dev]"
+
+python -m pytest
+
+python -m ruff check .
+
+python -m jsonify
+```
+
+Before creating a pull request, verify that:
+
+- The application starts successfully.
+- JSON loading works.
+- Normal View works.
+- Hierarchy View works.
+- Filtered View works.
+- Graph View works.
+- Tests pass.
+- Ruff reports no unexpected issues.
+
+---
+
+## Example JSON
+
+The following payload can be used for a quick application test:
+
+```json
+{
+  "company": "Example Robotics",
+  "departments": [
+    {
+      "name": "Engineering",
+      "teams": [
+        {
+          "name": "Firmware",
+          "members": [
+            {
+              "name": "Alice",
+              "tasks": [
+                {
+                  "id": "T-1",
+                  "title": "Bootloader update",
+                  "status": "done",
+                  "subtasks": [
+                    {
+                      "id": "ST-1",
+                      "description": "Update flash driver",
+                      "done": true
+                    },
+                    {
+                      "id": "ST-2",
+                      "description": "Run regression tests",
+                      "done": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## Development Principles
+
+The project is structured around several principles:
+
+**Separation of concerns** — parsing, business logic, visualization, and UI code are kept in separate modules.
+
+**Testability** — core functionality and services are designed so they can be tested without launching the desktop interface.
+
+**Maintainability** — large features are separated into focused modules rather than being placed in a single application file.
+
+**Offline graph support** — D3.js is bundled as an application resource rather than fetched from the internet every time the graph is opened.
+
+**Package-based execution** — the application uses the `src` package layout and can be launched using `python -m jsonify`.
+
+---
 
 ## Troubleshooting
 
-- **Graph tab shows a note instead of a live graph** — your PySide6
-  install doesn't include WebEngine. Run:
-  ```bash
-  pip install PySide6-WebEngine
-  ```
-  Until then, use the **Open Graph in Browser** button — it writes the
-  same interactive graph to a temp `.html` file and opens it in your
-  default browser.
+### `No module named jsonify`
 
-- **"Invalid JSON" dialog on Load** — the error message includes the
-  line/column where parsing failed; fix that spot in the editor and
-  click Load again.
+Install the project in editable mode:
 
-## Extending it
+```powershell
+python -m pip install -e .
+```
 
-- **Search by value, not just key**: add a `find_by_value()` sibling
-  to `find_values_by_key()` in `json_utils.py`, same recursive-walk
-  pattern.
-- **Syntax highlighting in the editor**: swap `QPlainTextEdit` for a
-  `QPlainTextEdit` + a `QSyntaxHighlighter` subclass that colors JSON
-  tokens (keys, strings, numbers, booleans).
-- **Save/Export**: add a toolbar button that writes
-  `self.editor.toPlainText()` to a `.json` file, or exports the graph
-  HTML permanently via `net.write_html("graph.html")` in
-  `graph_view.py`.
+Then verify the package:
+
+```powershell
+python -c "import jsonify; print(jsonify.__file__)"
+```
+
+### Graph View does not display
+
+Verify that the D3.js resource exists:
+
+```text
+src/jsonify/resources/d3.min.js
+```
+
+Test resource loading:
+
+```powershell
+python -c "from importlib.resources import files; p=files('jsonify.resources').joinpath('d3.min.js'); print(len(p.read_text(encoding='utf-8')))"
+```
+
+If a positive file size is displayed, the D3 resource is being found successfully.
+
+### Tests cannot import `jsonify`
+
+Install the package and development dependencies:
+
+```powershell
+python -m pip install -e ".[dev]"
+```
+
+Then run:
+
+```powershell
+python -m pytest
+```
+
+---
+
+## License
+
+No license has been specified for this project yet.

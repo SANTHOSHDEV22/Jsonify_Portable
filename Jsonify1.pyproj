@@ -30,6 +30,7 @@
     <Compile Include="src\jsonify\core\parser.py" />
     <Compile Include="src\jsonify\core\traversal.py" />
     <Compile Include="src\jsonify\core\__init__.py" />
+    <Compile Include="src\jsonify\resources\__init__.py" />
     <Compile Include="src\jsonify\services\graph_service.py" />
     <Compile Include="src\jsonify\services\json_service.py" />
     <Compile Include="src\jsonify\services\__init__.py" />
@@ -38,15 +39,23 @@
     <Compile Include="src\jsonify\ui\widgets\graph_view.py" />
     <Compile Include="src\jsonify\ui\widgets\hierarchy_view.py" />
     <Compile Include="src\jsonify\ui\widgets\tree_view.py" />
+    <Compile Include="src\jsonify\ui\widgets\_d3_source.py" />
     <Compile Include="src\jsonify\ui\widgets\__init__.py" />
     <Compile Include="src\jsonify\ui\__init__.py" />
     <Compile Include="src\jsonify\__init__.py" />
     <Compile Include="src\jsonify\__main__.py" />
+    <Compile Include="tests\test_graph_service.py" />
+    <Compile Include="tests\test_json_service.py" />
+    <Compile Include="tests\test_parser.py" />
+    <Compile Include="tests\test_traversal.py" />
+    <Compile Include="tests\__init__.py" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="tests\" />
     <Folder Include="src\" />
     <Folder Include="src\jsonify\" />
     <Folder Include="src\jsonify\core\" />
+    <Folder Include="src\jsonify\resources\" />
     <Folder Include="src\jsonify\ui\" />
     <Folder Include="src\jsonify\services\" />
     <Folder Include="src\jsonify\ui\widgets\" />
