@@ -205,72 +205,67 @@ def build_path_filtered_hierarchy_text(
     data: JSONValue,
     path: list[str],
 ) -> str:
-    """
-    Build hierarchy text for values matching a selected key path.
+    """Build a hierarchy containing only the selected key path.
 
-    Args:
-        data:
-            Parsed JSON payload.
-
-        path:
-            Selected hierarchy keys.
-
-    Returns:
-        Formatted matching JSON hierarchy.
+    Container nodes (objects and arrays) are kept so the result has the
+    same visual shape as Hierarchy View, while sibling keys that were not
+    selected are omitted.  This also works when arrays occur at any level
+    of the selected path.
     """
     if not path:
         return build_hierarchy_text(data)
 
-    matches = _resolve_path(
-        data=data,
+    found, filtered = _filter_to_path(
+        value=data,
         path=path,
     )
 
-    if not matches:
+    if not found:
         return "No values were found for path:\n\n" + " → ".join(path)
 
-    lines: list[str] = [
-        f"Path: {' → '.join(path)}",
-        f"Matches: {len(matches)}",
-        "",
-    ]
-
-    for index, value in enumerate(
-        matches,
-        start=1,
-    ):
-        if len(matches) > 1:
-            lines.append(f"--- Match {index} ---")
-
-        lines.append(build_hierarchy_text(value))
-
-        if index < len(matches):
-            lines.append("")
-
-    return "\n".join(lines)
+    return build_hierarchy_text(filtered)
 
 
-def _resolve_path(
-    data: JSONValue,
+def _filter_to_path(
+    value: JSONValue,
     path: list[str],
-) -> list[JSONValue]:
-    """Resolve all values matching a hierarchy key path."""
+) -> tuple[bool, JSONValue]:
+    """Project ``value`` to ``path`` while preserving containers.
 
-    nodes: list[JSONValue] = [data]
+    Lists are transparent to the path: selecting ``short_item_number``
+    from a root list keeps the list and each matching object, but removes
+    every unselected key from those objects.
+    """
+    if isinstance(value, list):
+        filtered_items: list[JSONValue] = []
 
-    for key in path:
-        next_nodes: list[JSONValue] = []
-
-        for node in nodes:
-            _collect_values_for_key(
-                node=node,
-                key=key,
-                results=next_nodes,
+        for item in value:
+            found, filtered_item = _filter_to_path(
+                value=item,
+                path=path,
             )
+            if found:
+                filtered_items.append(filtered_item)
 
-        nodes = next_nodes
+        return bool(filtered_items), filtered_items
 
-        if not nodes:
-            break
+    if not path or not isinstance(value, dict):
+        return False, {}
 
-    return nodes
+    key = path[0]
+    if key not in value:
+        return False, {}
+
+    child = value[key]
+
+    if len(path) == 1:
+        return True, {key: child}
+
+    found, filtered_child = _filter_to_path(
+        value=child,
+        path=path[1:],
+    )
+    if not found:
+        return False, {}
+
+    return True, {key: filtered_child}

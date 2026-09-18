@@ -8,17 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from cryptography.exceptions import (
-    InvalidSignature,
-)
-from cryptography.hazmat.primitives import (
-    hashes,
-    serialization,
-)
-from cryptography.hazmat.primitives.asymmetric import (
-    padding,
-    rsa,
-)
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from jsonify.core.licensing import (
     FREE_FEATURES,
@@ -37,35 +29,19 @@ class LicenseService:
 
     PRODUCT_NAME = "jsonify"
     LICENSE_VERSION = 1
+    CODE_PREFIX = "JPRO1-"
 
-    def __init__(
-        self,
-        public_key_pem: bytes,
-    ) -> None:
-        public_key = (
-            serialization.load_pem_public_key(
-                public_key_pem
-            )
-        )
+    def __init__(self, public_key_pem: bytes) -> None:
+        public_key = serialization.load_pem_public_key(public_key_pem)
 
-        if not isinstance(
-            public_key,
-            rsa.RSAPublicKey,
-        ):
-            raise LicenseError(
-                "Jsonify requires an RSA public key."
-            )
+        if not isinstance(public_key, rsa.RSAPublicKey):
+            raise LicenseError("Jsonify requires an RSA public key.")
 
         self._public_key = public_key
-
-        self._license = LicenseInfo(
-            tier=LicenseTier.FREE
-        )
+        self._license = LicenseInfo(tier=LicenseTier.FREE)
 
     @property
-    def current_license(
-        self,
-    ) -> LicenseInfo:
+    def current_license(self) -> LicenseInfo:
         """Return the active license."""
 
         return self._license
@@ -73,239 +49,163 @@ class LicenseService:
     def reset_to_free(self) -> None:
         """Reset Jsonify to Free mode."""
 
-        self._license = LicenseInfo(
-            tier=LicenseTier.FREE
-        )
+        self._license = LicenseInfo(tier=LicenseTier.FREE)
 
-    def has_feature(
-        self,
-        feature: Feature,
-    ) -> bool:
+    def has_feature(self, feature: Feature) -> bool:
         """Return whether the active license allows a feature."""
 
         if feature in FREE_FEATURES:
             return True
-
         return self._license.is_pro
 
-    def activate_file(
-        self,
-        file_path: str | Path,
-    ) -> LicenseInfo:
+    def activate_file(self, file_path: str | Path) -> LicenseInfo:
         """Validate and activate a signed license file."""
 
         path = Path(file_path)
-
         try:
-            document = json.loads(
-                path.read_text(
-                    encoding="utf-8"
-                )
-            )
+            document = json.loads(path.read_text(encoding="utf-8"))
         except OSError as error:
-            raise LicenseError(
-                f"Unable to open license: {error}"
-            ) from error
-
+            raise LicenseError(f"Unable to open license: {error}") from error
         except json.JSONDecodeError as error:
-            raise LicenseError(
-                "The selected license file is invalid."
-            ) from error
+            raise LicenseError("The selected license file is invalid.") from error
 
-        license_info = (
-            self._validate_document(
-                document
-            )
-        )
-
+        license_info = self._validate_document(document)
         self._license = license_info
-
         return license_info
 
-    def _validate_document(
-        self,
-        document: object,
-    ) -> LicenseInfo:
+    def activate_code(self, license_code: str) -> LicenseInfo:
+        """Validate and activate a license code received from Jsonify."""
+
+        document = self.decode_license_code(license_code)
+        license_info = self._validate_document(document)
+        self._license = license_info
+        return license_info
+
+    @classmethod
+    def decode_license_code(cls, license_code: str) -> dict[str, Any]:
+        """Decode a portable license code into its signed document."""
+
+        code = "".join(license_code.strip().split())
+
+        if code.upper().startswith(cls.CODE_PREFIX):
+            code = code[len(cls.CODE_PREFIX):]
+
+        if not code:
+            raise LicenseError("Enter a Jsonify license code.")
+
+        try:
+            padding_needed = (-len(code)) % 4
+            raw = base64.urlsafe_b64decode(code + ("=" * padding_needed))
+            document = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise LicenseError("The license code is invalid.") from error
+
+        if not isinstance(document, dict):
+            raise LicenseError("Invalid Jsonify license format.")
+
+        return document
+
+    @classmethod
+    def encode_license_document(cls, document: dict[str, Any]) -> str:
+        """Encode a signed license document for email delivery.
+
+        Production signing must happen on the server. This helper only turns
+        an already-signed document into a copy/paste-friendly code.
+        """
+
+        raw = json.dumps(
+            document,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+
+        encoded = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+        return f"{cls.CODE_PREFIX}{encoded}"
+
+    def _validate_document(self, document: object) -> LicenseInfo:
         """Validate a signed license document."""
 
         if not isinstance(document, dict):
-            raise LicenseError(
-                "Invalid Jsonify license format."
-            )
+            raise LicenseError("Invalid Jsonify license format.")
 
-        payload = document.get(
-            "payload"
-        )
-
-        signature_text = document.get(
-            "signature"
-        )
+        payload = document.get("payload")
+        signature_text = document.get("signature")
 
         if not isinstance(payload, dict):
-            raise LicenseError(
-                "License payload is missing."
-            )
+            raise LicenseError("License payload is missing.")
+        if not isinstance(signature_text, str):
+            raise LicenseError("License signature is missing.")
 
-        if not isinstance(
-            signature_text,
-            str,
-        ):
-            raise LicenseError(
-                "License signature is missing."
-            )
-
-        self._validate_payload(
-            payload
-        )
-
-        signed_bytes = (
-            self._canonical_payload(
-                payload
-            )
-        )
+        self._validate_payload(payload)
+        signed_bytes = self._canonical_payload(payload)
 
         try:
-            signature = base64.b64decode(
-                signature_text,
-                validate=True,
-            )
+            signature = base64.b64decode(signature_text, validate=True)
         except ValueError as error:
-            raise LicenseError(
-                "License signature is invalid."
-            ) from error
+            raise LicenseError("License signature is invalid.") from error
 
         try:
             self._public_key.verify(
                 signature,
                 signed_bytes,
                 padding.PSS(
-                    mgf=padding.MGF1(
-                        hashes.SHA256()
-                    ),
-                    salt_length=(
-                        padding.PSS.MAX_LENGTH
-                    ),
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
                 ),
                 hashes.SHA256(),
             )
-
         except InvalidSignature as error:
             raise LicenseError(
-                (
-                    "License verification failed. "
-                    "The license may have been modified."
-                )
+                "License verification failed. The license may have been modified."
             ) from error
 
-        tier_text = payload.get(
-            "tier"
-        )
-
+        tier_text = payload.get("tier")
         try:
-            tier = LicenseTier(
-                tier_text
-            )
+            tier = LicenseTier(tier_text)
         except ValueError as error:
-            raise LicenseError(
-                "Unknown license tier."
-            ) from error
+            raise LicenseError("Unknown license tier.") from error
 
-        expires_at = payload.get(
-            "expires_at"
-        )
+        expires_at = payload.get("expires_at")
+        if expires_at is not None and not isinstance(expires_at, str):
+            raise LicenseError("Invalid license expiry date.")
 
-        if (
-            expires_at is not None
-            and not isinstance(
-                expires_at,
-                str,
-            )
-        ):
-            raise LicenseError(
-                "Invalid license expiry date."
-            )
-
-        if (
-            expires_at
-            and self._is_expired(
-                expires_at
-            )
-        ):
-            raise LicenseError(
-                "This Jsonify license has expired."
-            )
+        if expires_at and self._is_expired(expires_at):
+            raise LicenseError("This Jsonify license has expired.")
 
         return LicenseInfo(
             tier=tier,
-            licensed_to=str(
-                payload.get(
-                    "licensed_to",
-                    "",
-                )
-            ),
-            license_id=str(
-                payload.get(
-                    "license_id",
-                    "",
-                )
-            ),
+            licensed_to=str(payload.get("licensed_to", "")),
+            license_id=str(payload.get("license_id", "")),
             expires_at=expires_at,
+            email=str(payload.get("email", "")),
         )
 
-    def _validate_payload(
-        self,
-        payload: dict[str, Any],
-    ) -> None:
+    def _validate_payload(self, payload: dict[str, Any]) -> None:
         """Validate required license metadata."""
 
-        if (
-            payload.get("product")
-            != self.PRODUCT_NAME
-        ):
-            raise LicenseError(
-                "This license is not for Jsonify."
-            )
+        if payload.get("product") != self.PRODUCT_NAME:
+            raise LicenseError("This license is not for Jsonify.")
 
-        if (
-            payload.get(
-                "license_version"
-            )
-            != self.LICENSE_VERSION
-        ):
-            raise LicenseError(
-                "Unsupported license version."
-            )
+        if payload.get("license_version") != self.LICENSE_VERSION:
+            raise LicenseError("Unsupported license version.")
 
-        if not isinstance(
-            payload.get("license_id"),
-            str,
-        ):
-            raise LicenseError(
-                "License ID is missing."
-            )
+        if not isinstance(payload.get("license_id"), str):
+            raise LicenseError("License ID is missing.")
 
-        if not isinstance(
-            payload.get("licensed_to"),
-            str,
-        ):
-            raise LicenseError(
-                "Licensed user is missing."
-            )
+        if not isinstance(payload.get("licensed_to"), str):
+            raise LicenseError("Licensed user is missing.")
+
+        email = payload.get("email")
+        if email is not None and not isinstance(email, str):
+            raise LicenseError("Invalid licensed email.")
 
         tier = payload.get("tier")
-
-        if tier not in {
-            LicenseTier.FREE.value,
-            LicenseTier.PRO.value,
-        }:
-            raise LicenseError(
-                "Unknown license tier."
-            )
+        if tier not in {LicenseTier.FREE.value, LicenseTier.PRO.value}:
+            raise LicenseError("Unknown license tier.")
 
     @staticmethod
-    def _canonical_payload(
-        payload: dict[str, Any],
-    ) -> bytes:
+    def _canonical_payload(payload: dict[str, Any]) -> bytes:
         """Create deterministic bytes for signature verification."""
 
         return json.dumps(
@@ -316,39 +216,18 @@ class LicenseService:
         ).encode("utf-8")
 
     @staticmethod
-    def _is_expired(
-        expires_at: str,
-    ) -> bool:
+    def _is_expired(expires_at: str) -> bool:
         """Return whether a license has expired."""
 
         try:
-            normalized = (
-                expires_at.replace(
-                    "Z",
-                    "+00:00",
-                )
-            )
-
-            expiry = datetime.fromisoformat(
-                normalized
-            )
-
+            normalized = expires_at.replace("Z", "+00:00")
+            expiry = datetime.fromisoformat(normalized)
         except ValueError as error:
-            raise LicenseError(
-                "Invalid license expiry date."
-            ) from error
+            raise LicenseError("Invalid license expiry date.") from error
 
         if expiry.tzinfo is None:
             raise LicenseError(
-                (
-                    "License expiry date "
-                    "must contain a timezone."
-                )
+                "License expiry date must contain a timezone."
             )
 
-        return (
-            datetime.now(timezone.utc)
-            >= expiry.astimezone(
-                timezone.utc
-            )
-        )
+        return datetime.now(timezone.utc) >= expiry.astimezone(timezone.utc)

@@ -43,7 +43,6 @@ FREE_FEATURES: frozenset[Feature] = frozenset(
     }
 )
 
-
 PRO_FEATURES: frozenset[Feature] = frozenset(
     set(Feature) - FREE_FEATURES
 )
@@ -57,6 +56,7 @@ class LicenseInfo:
     licensed_to: str = ""
     license_id: str = ""
     expires_at: str | None = None
+    email: str = ""
 
     @property
     def is_pro(self) -> bool:

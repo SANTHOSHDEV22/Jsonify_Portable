@@ -22,6 +22,18 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include=".gitignore" />
+    <Content Include="Jsonify-License-Server\.env" />
+    <Content Include="Jsonify-License-Server\.env.example" />
+    <Content Include="Jsonify-License-Server\.gitignore" />
+    <Content Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\FileContentIndex\11c930ac-1463-4c01-a307-c726c28e74f2.vsidx" />
+    <Content Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\v18\.wsuo" />
+    <Content Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\v18\DocumentLayout.json" />
+    <Content Include="Jsonify-License-Server\.vs\ProjectSettings.json" />
+    <Content Include="Jsonify-License-Server\.vs\slnx.sqlite" />
+    <Content Include="Jsonify-License-Server\.vs\VSWorkspaceState.json" />
+    <Content Include="Jsonify-License-Server\README.md" />
+    <Content Include="Jsonify-License-Server\requirements.txt" />
+    <Content Include="Jsonify-License-Server\secrets\README.txt" />
     <Content Include="Jsonify.spec" />
     <Content Include="pyproject.toml" />
     <Content Include="requirements.txt" />
@@ -29,6 +41,12 @@
     <Content Include="src\jsonify\resources\license_public.pem" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Jsonify-License-Server\app\database.py" />
+    <Compile Include="Jsonify-License-Server\app\main.py" />
+    <Compile Include="Jsonify-License-Server\app\models.py" />
+    <Compile Include="Jsonify-License-Server\app\repositories\license_repository.py" />
+    <Compile Include="Jsonify-License-Server\app\repositories\__init__.py" />
+    <Compile Include="Jsonify-License-Server\app\__init__.py" />
     <Compile Include="src\jsonify\core\diff.py" />
     <Compile Include="src\jsonify\core\large_json.py" />
     <Compile Include="src\jsonify\core\licensing.py" />
@@ -48,6 +66,7 @@
     <Compile Include="src\jsonify\services\json_service.py" />
     <Compile Include="src\jsonify\services\large_json_service.py" />
     <Compile Include="src\jsonify\services\license_factory.py" />
+    <Compile Include="src\jsonify\services\license_purchase_service.py" />
     <Compile Include="src\jsonify\services\license_service.py" />
     <Compile Include="src\jsonify\services\license_storage.py" />
     <Compile Include="src\jsonify\services\masking_service.py" />
@@ -94,6 +113,14 @@
     <Compile Include="tools\issue_license.py" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="Jsonify-License-Server\" />
+    <Folder Include="Jsonify-License-Server\.vs\" />
+    <Folder Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\" />
+    <Folder Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\FileContentIndex\" />
+    <Folder Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\v18\" />
+    <Folder Include="Jsonify-License-Server\app\" />
+    <Folder Include="Jsonify-License-Server\app\repositories\" />
+    <Folder Include="Jsonify-License-Server\secrets\" />
     <Folder Include="tools\" />
     <Folder Include="tests\" />
     <Folder Include="src\" />
