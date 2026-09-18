@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -36,12 +36,14 @@ from jsonify.services.license_storage import LicenseStorage
 from jsonify.services.session_service import SessionError, SessionService
 
 from jsonify.ui.constants import (
+    APP_NAME,
+    APP_VERSION,
     DARK_STYLESHEET,
     DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH,
-    EDITOR_PLACEHOLDER,
     FILTERED_VIEW_PLACEHOLDER,
     LEVEL_PLACEHOLDER,
+    LIGHT_STYLESHEET,
     MESSAGE_INVALID_JSON_TITLE,
     MESSAGE_NO_JSON,
     MESSAGE_NO_JSON_TITLE,
@@ -125,6 +127,12 @@ class MainWindow(QMainWindow):
         self._level_combos: list[QComboBox] = []
 
         # -------------------------------------------------------------
+        # Theme state
+        # -------------------------------------------------------------
+
+        self._dark_mode: bool = True
+
+        # -------------------------------------------------------------
         # Setup
         # -------------------------------------------------------------
 
@@ -188,10 +196,6 @@ class MainWindow(QMainWindow):
 
         root_layout.setSpacing(
             0
-        )
-
-        root_layout.addWidget(
-            self._create_control_bar()
         )
 
         root_layout.addWidget(
@@ -306,15 +310,81 @@ class MainWindow(QMainWindow):
         )
 
         # -------------------------------------------------------------
-        # License menu
+        # Settings menu
         # -------------------------------------------------------------
 
-        license_menu = menu_bar.addMenu(
-            "&License"
+        settings_menu = menu_bar.addMenu(
+            "&Settings"
+        )
+
+        theme_group = QActionGroup(
+            self
+        )
+
+        theme_group.setExclusive(
+            True
+        )
+
+        self._dark_mode_action = QAction(
+            "Dark Mode",
+            self,
+        )
+
+        self._dark_mode_action.setCheckable(
+            True
+        )
+
+        self._dark_mode_action.setChecked(
+            self._dark_mode
+        )
+
+        self._dark_mode_action.triggered.connect(
+            lambda: self._set_theme(True)
+        )
+
+        theme_group.addAction(
+            self._dark_mode_action
+        )
+
+        settings_menu.addAction(
+            self._dark_mode_action
+        )
+
+        self._light_mode_action = QAction(
+            "Light Mode",
+            self,
+        )
+
+        self._light_mode_action.setCheckable(
+            True
+        )
+
+        self._light_mode_action.setChecked(
+            not self._dark_mode
+        )
+
+        self._light_mode_action.triggered.connect(
+            lambda: self._set_theme(False)
+        )
+
+        theme_group.addAction(
+            self._light_mode_action
+        )
+
+        settings_menu.addAction(
+            self._light_mode_action
+        )
+
+        # -------------------------------------------------------------
+        # About menu
+        # -------------------------------------------------------------
+
+        about_menu = menu_bar.addMenu(
+            "&About"
         )
 
         manage_license_action = QAction(
-            "Manage License",
+            "License",
             self,
         )
 
@@ -322,65 +392,91 @@ class MainWindow(QMainWindow):
             self._show_license_tab
         )
 
-        license_menu.addAction(
+        about_menu.addAction(
             manage_license_action
         )
 
-    # =================================================================
-    # Control bar
-    # =================================================================
+        about_menu.addSeparator()
 
-    def _create_control_bar(
+        version_action = QAction(
+            "Version",
+            self,
+        )
+
+        version_action.triggered.connect(
+            self._show_version_dialog
+        )
+
+        about_menu.addAction(
+            version_action
+        )
+
+        about_action = QAction(
+            "About",
+            self,
+        )
+
+        about_action.triggered.connect(
+            self._show_about_dialog
+        )
+
+        about_menu.addAction(
+            about_action
+        )
+
+    def _set_theme(
         self,
-    ) -> QWidget:
-        """Create the application control bar."""
+        dark: bool,
+    ) -> None:
+        """Apply dark or light mode.
 
-        control_bar = QWidget()
+        Only re-styles the Qt chrome (window, panes, tabs, buttons,
+        the tree/hierarchy/filtered text views) — the Graph tab's
+        embedded D3 view has its own separate dark background baked
+        into the HTML it renders and isn't affected by this setting.
+        """
 
-        control_bar.setObjectName(
-            "controlBar"
+        self._dark_mode = dark
+
+        self.setStyleSheet(
+            DARK_STYLESHEET
+            if dark
+            else LIGHT_STYLESHEET
         )
 
-        layout = QHBoxLayout(
-            control_bar
+        self._dark_mode_action.setChecked(
+            dark
         )
 
-        layout.setContentsMargins(
-            10,
-            8,
-            10,
-            8,
+        self._light_mode_action.setChecked(
+            not dark
         )
 
-        layout.setSpacing(
-            8
+    def _show_version_dialog(
+        self,
+    ) -> None:
+        """Show the application version."""
+
+        QMessageBox.information(
+            self,
+            "Version",
+            f"{APP_NAME} version {APP_VERSION}",
         )
 
-        self._payload_status = QLabel(
-            "No JSON loaded"
-        )
+    def _show_about_dialog(
+        self,
+    ) -> None:
+        """Show application information."""
 
-        layout.addWidget(
-            self._payload_status
+        QMessageBox.information(
+            self,
+            "About",
+            (
+                f"{APP_NAME} version {APP_VERSION}\n\n"
+                "A JSON payload viewer and editor with tree, "
+                "hierarchy, filtered, and graph views."
+            ),
         )
-
-        layout.addStretch(
-            1
-        )
-
-        self._load_button = QPushButton(
-            "▶ LOAD JSON"
-        )
-
-        self._load_button.clicked.connect(
-            self._load_json
-        )
-
-        layout.addWidget(
-            self._load_button
-        )
-
-        return control_bar
 
     # =================================================================
     # Split view
@@ -444,15 +540,33 @@ class MainWindow(QMainWindow):
             6,
         )
 
-        layout.addWidget(
+        header = QHBoxLayout()
+
+        header.addWidget(
             QLabel("JSON Editor")
         )
 
-        self._editor = QPlainTextEdit()
-
-        self._editor.setPlaceholderText(
-            EDITOR_PLACEHOLDER
+        header.addStretch(
+            1
         )
+
+        self._load_button = QPushButton(
+            "▶ LOAD JSON"
+        )
+
+        self._load_button.clicked.connect(
+            self._load_json
+        )
+
+        header.addWidget(
+            self._load_button
+        )
+
+        layout.addLayout(
+            header
+        )
+
+        self._editor = QPlainTextEdit()
 
         self._editor.setTabStopDistance(
             20
@@ -1072,13 +1186,8 @@ class MainWindow(QMainWindow):
             f"{large_text}"
         )
 
-        self._payload_status.setText(
-            status
-        )
-
         self.statusBar().showMessage(
-            f"JSON loaded | {status}",
-            5000,
+            f"JSON loaded | {status}"
         )
 
     # =================================================================

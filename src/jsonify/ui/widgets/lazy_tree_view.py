@@ -433,20 +433,30 @@ class LazyJsonTreeView(QTreeView):
 
         header = self.header()
 
+        header.setStretchLastSection(
+            False
+        )
+
         header.setSectionResizeMode(
             0,
-            QHeaderView.ResizeMode.ResizeToContents,
+            QHeaderView.ResizeMode.Interactive,
         )
 
         header.setSectionResizeMode(
             1,
-            QHeaderView.ResizeMode.Stretch,
+            QHeaderView.ResizeMode.Interactive,
         )
 
         header.setSectionResizeMode(
             2,
-            QHeaderView.ResizeMode.ResizeToContents,
+            QHeaderView.ResizeMode.Interactive,
         )
+
+        # Column widths are applied in set_payload() instead of here:
+        # the header has no real columns until a model with data exists,
+        # so setColumnWidth() calls made before setModel() are silently
+        # discarded and every column falls back to Qt's 100px default.
+        self._columns_initialized = False
 
     def set_payload(
         self,
@@ -465,6 +475,24 @@ class LazyJsonTreeView(QTreeView):
         )
 
         self.collapseAll()
+
+        if not self._columns_initialized:
+            self.setColumnWidth(
+                0,
+                220,
+            )
+
+            self.setColumnWidth(
+                1,
+                360,
+            )
+
+            self.setColumnWidth(
+                2,
+                100,
+            )
+
+            self._columns_initialized = True
 
     def clear_payload(self) -> None:
         """Clear the JSON tree."""

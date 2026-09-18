@@ -6,14 +6,13 @@ import json
 
 from jsonify.core.models import JSONValue
 
-_INDENT = "    "
-
-
 def build_hierarchy_text(
     data: JSONValue,
 ) -> str:
     """
-    Convert a JSON payload into readable hierarchy text.
+    Convert a JSON payload into readable hierarchy text, using
+    box-drawing tree connectors (├──, └──, │) to show parent/child
+    relationships at a glance.
 
     Args:
         data:
@@ -27,7 +26,8 @@ def build_hierarchy_text(
     _append_hierarchy(
         value=data,
         lines=lines,
-        depth=0,
+        prefix="",
+        is_last=True,
         label="$",
     )
 
@@ -37,44 +37,54 @@ def build_hierarchy_text(
 def _append_hierarchy(
     value: JSONValue,
     lines: list[str],
-    depth: int,
+    prefix: str,
+    is_last: bool,
     label: str,
 ) -> None:
-    """Recursively append hierarchy lines."""
+    """Recursively append box-drawing hierarchy lines.
 
-    indentation = _INDENT * depth
+    `prefix` accumulates the vertical connector columns ("│   ") of
+    every ancestor that still has more siblings below it, so lines
+    stay connected all the way down the tree rather than just being
+    flatly indented.
+    """
+
+    connector = "└── " if is_last else "├── "
 
     if isinstance(value, dict):
-        lines.append(f"{indentation}{label} {{")
+        lines.append(f"{prefix}{connector}{label} {{{len(value)}}}")
 
-        for key, child_value in value.items():
+        next_prefix = prefix + ("    " if is_last else "│   ")
+        items = list(value.items())
+
+        for index, (key, child_value) in enumerate(items):
             _append_hierarchy(
                 value=child_value,
                 lines=lines,
-                depth=depth + 1,
+                prefix=next_prefix,
+                is_last=index == len(items) - 1,
                 label=str(key),
             )
-
-        lines.append(f"{indentation}}}")
 
         return
 
     if isinstance(value, list):
-        lines.append(f"{indentation}{label} [")
+        lines.append(f"{prefix}{connector}{label} [{len(value)}]")
+
+        next_prefix = prefix + ("    " if is_last else "│   ")
 
         for index, child_value in enumerate(value):
             _append_hierarchy(
                 value=child_value,
                 lines=lines,
-                depth=depth + 1,
+                prefix=next_prefix,
+                is_last=index == len(value) - 1,
                 label=f"[{index}]",
             )
 
-        lines.append(f"{indentation}]")
-
         return
 
-    lines.append(f"{indentation}{label}: {_format_primitive(value)}")
+    lines.append(f"{prefix}{connector}{label}: {_format_primitive(value)}")
 
 
 def _format_primitive(

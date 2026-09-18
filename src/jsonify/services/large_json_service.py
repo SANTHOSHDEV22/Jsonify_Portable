@@ -19,6 +19,15 @@ class LargeJsonSettings:
     preview_length: int = 120
     array_page_size: int = 500
 
+    # Hierarchy View renders as one big plain-text string (with
+    # box-drawing tree connectors for every single node) rather than a
+    # lazy/virtualized tree, so it's considerably more expensive per
+    # node than the Normal View tab. This limit is intentionally much
+    # lower than lazy_threshold: past this many nodes, the hierarchy
+    # view shows a size summary instead of attempting a full render,
+    # to keep the UI responsive.
+    hierarchy_preview_nodes: int = 2_000
+
 
 class LargeJsonService:
     """Provides large-payload analysis and rendering decisions."""

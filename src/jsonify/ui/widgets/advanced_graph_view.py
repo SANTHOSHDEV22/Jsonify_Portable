@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+import webbrowser
 from importlib.resources import files
 
 from PySide6.QtCore import Qt
@@ -11,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSlider,
     QVBoxLayout,
@@ -40,6 +44,7 @@ class AdvancedGraphView(QWidget):
 
         self._payload: JSONValue | None = None
         self._graph_data: GraphData | None = None
+        self._last_html: str | None = None
 
         self._setup_ui()
 
@@ -104,6 +109,24 @@ class AdvancedGraphView(QWidget):
             self._toggle_fullscreen
         )
 
+        # QWebEngineView depends on Chromium's GPU/compositor stack,
+        # which can fail to initialize on some machines (VMs, locked-
+        # down or unsupported GPU drivers) even when the graph HTML
+        # itself is perfectly valid — no combination of Chromium flags
+        # fixes this on every machine, and a wrong combination can even
+        # make Chromium refuse to start at all. So this button is
+        # always available as a guaranteed-working fallback: it writes
+        # the exact same graph HTML to a temp file and opens it in the
+        # system's default browser, which doesn't depend on
+        # QtWebEngine at all.
+        open_browser_button = QPushButton(
+            "Open in Browser"
+        )
+
+        open_browser_button.clicked.connect(
+            self._open_graph_in_browser
+        )
+
         self._labels_checkbox = QCheckBox(
             "Labels"
         )
@@ -147,6 +170,10 @@ class AdvancedGraphView(QWidget):
 
         toolbar.addWidget(
             fullscreen_button
+        )
+
+        toolbar.addWidget(
+            open_browser_button
         )
 
         layout.addLayout(
@@ -263,12 +290,42 @@ class AdvancedGraphView(QWidget):
 
         self._payload = None
         self._graph_data = None
+        self._last_html = None
 
         self._web_view.setHtml("")
 
         self._stats.setText(
             "Load JSON to display graph."
         )
+
+    def _open_graph_in_browser(self) -> None:
+        """Open the current graph in the system's default browser.
+
+        Reuses one fixed filename in the OS temp folder across every
+        click/session, instead of creating a fresh randomly-named temp
+        file each time — the browser just reloads this one file with
+        whatever the current graph is, so nothing accumulates on disk
+        no matter how many times this button is clicked.
+        """
+
+        if not self._last_html:
+            QMessageBox.information(
+                self,
+                "No graph yet",
+                "Load a JSON payload first.",
+            )
+
+            return
+
+        path = os.path.join(
+            tempfile.gettempdir(),
+            "jsonify_graph_view.html",
+        )
+
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(self._last_html)
+
+        webbrowser.open(f"file://{path}")
 
     def _render_graph(self) -> None:
         """Render D3 graph."""
@@ -308,6 +365,8 @@ class AdvancedGraphView(QWidget):
             d3_source,
             graph_json,
         )
+
+        self._last_html = html
 
         self._web_view.setHtml(
             html
