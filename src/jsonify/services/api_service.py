@@ -5,9 +5,19 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from typing import Any, cast
 
 import httpx
 
+from jsonify.core.api_request import (
+    SUPPORTED_METHODS as _METHODS,
+)
+from jsonify.core.api_request import (
+    ApiRequest,
+    apply_variables,
+    effective_request,
+)
+from jsonify.core.diff import JsonDiff, compare_json
 from jsonify.core.models import JSONValue
 
 
@@ -32,6 +42,7 @@ class ApiResponse:
     json_data: JSONValue | None
     is_json: bool
     url: str
+    size_bytes: int = 0
 
     @property
     def successful(self) -> bool:
@@ -40,25 +51,28 @@ class ApiResponse:
         return 200 <= self.status_code < 300
 
 
+@dataclass(frozen=True, slots=True)
+class EnvironmentComparison:
+    """Result of running one request against two environments."""
+
+    first: ApiResponse
+    second: ApiResponse
+    differences: list[JsonDiff]
+
+
 class ApiService:
     """Provides HTTP request functionality."""
 
-    SUPPORTED_METHODS = frozenset(
-        {
-            "GET",
-            "POST",
-            "PUT",
-            "PATCH",
-            "DELETE",
-        }
-    )
+    SUPPORTED_METHODS = frozenset(_METHODS)
 
     def __init__(
         self,
         *,
         timeout_seconds: float = 30.0,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._timeout_seconds = timeout_seconds
+        self._transport = transport
 
     def send(
         self,
@@ -68,74 +82,51 @@ class ApiService:
         headers: dict[str, str] | None = None,
         body_text: str = "",
     ) -> ApiResponse:
-        """
-        Send an HTTP request.
+        """Send a simple request (headers + optional JSON body)."""
 
-        Args:
-            method:
-                HTTP method.
-
-            url:
-                HTTP or HTTPS URL.
-
-            headers:
-                Optional HTTP headers.
-
-            body_text:
-                Optional JSON request body.
-
-        Returns:
-            ApiResponse containing status, timing, headers and body.
-
-        Raises:
-            ApiRequestError:
-                If the request cannot be completed.
-
-            ApiBodyError:
-                If a supplied JSON request body is invalid.
-        """
-
-        normalized_method = method.strip().upper()
-
-        if normalized_method not in self.SUPPORTED_METHODS:
-            raise ApiRequestError(
-                f"Unsupported HTTP method: {method}"
-            )
-
-        clean_url = url.strip()
-
-        if not clean_url:
-            raise ApiRequestError(
-                "API URL cannot be empty."
-            )
-
-        if not (
-            clean_url.startswith("http://")
-            or clean_url.startswith("https://")
-        ):
-            raise ApiRequestError(
-                "API URL must start with http:// or https://."
-            )
-
-        request_headers = dict(
-            headers or {}
+        request = ApiRequest(
+            method=method,
+            url=url,
+            headers=list((headers or {}).items()),
+            body_kind="json" if body_text.strip() else "none",
+            body_text=body_text,
         )
 
-        json_body: JSONValue | None = None
+        return self.send_request(request)
 
-        if body_text.strip():
+    def send_request(
+        self,
+        request: ApiRequest,
+        variables: dict[str, str] | None = None,
+    ) -> ApiResponse:
+        """Send a full request, substituting environment ``variables`` first.
+
+        Raises:
+            ApiRequestError: If the request cannot be completed.
+            ApiBodyError: If a JSON request body is invalid.
+        """
+
+        if variables:
+            request = apply_variables(request, variables)
+
+        effective = effective_request(request)
+
+        if effective.method not in self.SUPPORTED_METHODS:
+            raise ApiRequestError(f"Unsupported HTTP method: {request.method}")
+
+        if not effective.url:
+            raise ApiRequestError("API URL cannot be empty.")
+
+        if not effective.url.startswith(("http://", "https://")):
+            raise ApiRequestError("API URL must start with http:// or https://.")
+
+        if request.body_kind == "json" and request.body_text.strip():
             try:
-                json_body = json.loads(
-                    body_text
-                )
+                json.loads(request.body_text)
             except json.JSONDecodeError as error:
                 raise ApiBodyError(
-                    (
-                        "Invalid JSON request body: "
-                        f"{error.msg} "
-                        f"(line {error.lineno}, "
-                        f"column {error.colno})"
-                    )
+                    f"Invalid JSON request body: {error.msg} "
+                    f"(line {error.lineno}, column {error.colno})"
                 ) from error
 
         started = time.perf_counter()
@@ -144,36 +135,25 @@ class ApiService:
             with httpx.Client(
                 timeout=self._timeout_seconds,
                 follow_redirects=True,
+                transport=self._transport,
             ) as client:
                 response = client.request(
-                    method=normalized_method,
-                    url=clean_url,
-                    headers=request_headers,
-                    json=(
-                        json_body
-                        if body_text.strip()
-                        else None
-                    ),
+                    method=effective.method,
+                    url=effective.url,
+                    params=cast(Any, effective.params or None),
+                    headers=effective.headers,
+                    content=effective.body.encode("utf-8") if effective.body is not None else None,
                 )
 
         except httpx.TimeoutException as error:
             raise ApiRequestError(
-                (
-                    "The API request timed out after "
-                    f"{self._timeout_seconds:g} seconds."
-                )
+                f"The API request timed out after {self._timeout_seconds:g} seconds."
             ) from error
 
         except httpx.RequestError as error:
-            raise ApiRequestError(
-                f"Unable to send API request: {error}"
-            ) from error
+            raise ApiRequestError(f"Unable to send API request: {error}") from error
 
-        elapsed_ms = (
-            time.perf_counter() - started
-        ) * 1000
-
-        response_text = response.text
+        elapsed_ms = (time.perf_counter() - started) * 1000
 
         parsed_json: JSONValue | None = None
         is_json = False
@@ -193,42 +173,48 @@ class ApiService:
             reason_phrase=response.reason_phrase,
             elapsed_ms=elapsed_ms,
             headers=dict(response.headers),
-            content_type=response.headers.get(
-                "content-type",
-                "",
-            ),
-            text=response_text,
+            content_type=response.headers.get("content-type", ""),
+            text=response.text,
             json_data=parsed_json,
             is_json=is_json,
             url=str(response.url),
+            size_bytes=len(response.content),
+        )
+
+    def compare_environments(
+        self,
+        request: ApiRequest,
+        first_variables: dict[str, str],
+        second_variables: dict[str, str],
+    ) -> EnvironmentComparison:
+        """Run the same request under two environments and diff the JSON bodies."""
+
+        first = self.send_request(request, first_variables)
+        second = self.send_request(request, second_variables)
+
+        first_body: JSONValue = first.json_data if first.is_json else first.text
+        second_body: JSONValue = second.json_data if second.is_json else second.text
+
+        return EnvironmentComparison(
+            first=first,
+            second=second,
+            differences=compare_json(first_body, second_body),
         )
 
 
-def _is_json_value(
-    value: object,
-) -> bool:
+def _is_json_value(value: object) -> bool:
     """Return whether a value belongs to the JSON data model."""
 
     if value is None:
         return True
 
-    if isinstance(
-        value,
-        (str, int, float, bool),
-    ):
+    if isinstance(value, str | int | float | bool):
         return True
 
     if isinstance(value, list):
-        return all(
-            _is_json_value(item)
-            for item in value
-        )
+        return all(_is_json_value(item) for item in value)
 
     if isinstance(value, dict):
-        return all(
-            isinstance(key, str)
-            and _is_json_value(item)
-            for key, item in value.items()
-        )
+        return all(isinstance(key, str) and _is_json_value(item) for key, item in value.items())
 
     return False

@@ -90,8 +90,9 @@ def calculate_json_stats(data: JSONValue) -> dict[str, int]:
         data: Parsed JSON data.
 
     Returns:
-        Statistics containing object count, array count,
-        leaf count, maximum depth, and unique key count.
+        Statistics containing object/array/leaf counts, maximum depth,
+        unique key count, and a breakdown of leaf values by type
+        (nulls, booleans, strings, and numbers).
     """
     stats = {
         "objects": 0,
@@ -99,6 +100,10 @@ def calculate_json_stats(data: JSONValue) -> dict[str, int]:
         "leaves": 0,
         "max_depth": 0,
         "keys": 0,
+        "nulls": 0,
+        "booleans": 0,
+        "strings": 0,
+        "numbers": 0,
     }
 
     unique_keys: set[str] = set()
@@ -125,8 +130,54 @@ def calculate_json_stats(data: JSONValue) -> dict[str, int]:
         else:
             stats["leaves"] += 1
 
+            if node is None:
+                stats["nulls"] += 1
+            elif isinstance(node, bool):
+                stats["booleans"] += 1
+            elif isinstance(node, str):
+                stats["strings"] += 1
+            elif isinstance(node, int | float):
+                stats["numbers"] += 1
+
     walk(data)
 
     stats["keys"] = len(unique_keys)
 
     return stats
+
+
+def to_table_rows(
+    data: JSONValue,
+) -> tuple[list[str], list[list[JSONValue]]]:
+    """
+    Flatten an array of objects into table columns and rows.
+
+    Column order follows first-seen key order across all rows. Rows that
+    are missing a column get ``None`` for that cell; rows that aren't
+    objects at all are skipped.
+
+    Args:
+        data: A JSON array, ideally of objects.
+
+    Returns:
+        A tuple of (column names, row values) suitable for a table widget.
+    """
+    if not isinstance(data, list):
+        return [], []
+
+    columns: list[str] = []
+    seen_columns: set[str] = set()
+
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        for key in item:
+            if key not in seen_columns:
+                seen_columns.add(key)
+                columns.append(key)
+
+    rows: list[list[JSONValue]] = [
+        [item.get(column) for column in columns] for item in data if isinstance(item, dict)
+    ]
+
+    return columns, rows

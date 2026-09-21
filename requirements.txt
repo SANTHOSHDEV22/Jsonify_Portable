@@ -1,26 +1,20 @@
 # ============================================================
-# Jsonify - Python Dependencies
+# Jsonify - runtime dependencies
+#
+#   pip install -r requirements.txt
+#
+# Development tools:  requirements-dev.txt
+# Production builds:  requirements-build.txt
+# (pyproject.toml is the source of truth; a test keeps this file in sync.)
 # ============================================================
 
 # Desktop UI
 PySide6>=6.6
 
-# JSON tools
+# JSON tooling
 jsonpath-ng>=1.7
 jsonschema>=4.23
+PyYAML>=6.0
 
-
-# HTTP client
+# HTTP client (API client, update checks)
 httpx>=0.28
-
-# Testing
-pytest>=8.0
-pytest-cov>=5.0
-
-# Code quality
-ruff>=0.8
-
-# Static type checking
-mypy>=1.13
-
-cryptography>=43.0

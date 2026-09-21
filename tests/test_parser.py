@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from jsonify.core.parser import parse_json, parse_multiple_json
+from jsonify.core.parser import find_duplicate_keys, parse_json, parse_multiple_json
 
 
 def test_parse_json_object() -> None:
@@ -247,3 +247,34 @@ def test_parse_multiple_empty_input() -> None:
 
     with pytest.raises(json.JSONDecodeError):
         parse_multiple_json("")
+
+
+def test_find_duplicate_keys_none() -> None:
+    """No duplicate keys should produce no messages."""
+
+    assert find_duplicate_keys('{"a": 1, "b": 2}') == []
+
+
+def test_find_duplicate_keys_simple() -> None:
+    """A repeated key in the same object should be reported."""
+
+    messages = find_duplicate_keys('{"a": 1, "a": 2}')
+
+    assert len(messages) == 1
+    assert "a" in messages[0]
+
+
+def test_find_duplicate_keys_nested() -> None:
+    """Duplicate keys should be detected at any nesting level."""
+
+    raw_json = '{"outer": {"x": 1, "x": 2}, "y": 1, "y": 2}'
+
+    messages = find_duplicate_keys(raw_json)
+
+    assert len(messages) == 2
+
+
+def test_find_duplicate_keys_invalid_json() -> None:
+    """Invalid JSON should return no messages rather than raising."""
+
+    assert find_duplicate_keys("{not valid") == []

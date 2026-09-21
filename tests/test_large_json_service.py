@@ -22,12 +22,7 @@ def test_small_json_not_lazy() -> None:
         }
     )
 
-    assert (
-        service.should_use_lazy_tree(
-            info
-        )
-        is False
-    )
+    assert service.should_use_lazy_tree(info) is False
 
 
 def test_large_json_uses_lazy_tree() -> None:
@@ -37,20 +32,11 @@ def test_large_json_uses_lazy_tree() -> None:
         )
     )
 
-    payload = list(
-        range(20)
-    )
+    payload = list(range(20))
 
-    info = service.analyze(
-        payload
-    )
+    info = service.analyze(payload)
 
-    assert (
-        service.should_use_lazy_tree(
-            info
-        )
-        is True
-    )
+    assert service.should_use_lazy_tree(info) is True
 
 
 def test_object_preview() -> None:
@@ -70,12 +56,7 @@ def test_object_preview() -> None:
 def test_array_preview() -> None:
     service = LargeJsonService()
 
-    assert (
-        service.preview(
-            [1, 2, 3]
-        )
-        == "Array (3 items)"
-    )
+    assert service.preview([1, 2, 3]) == "Array (3 items)"
 
 
 def test_long_string_preview() -> None:
@@ -85,9 +66,7 @@ def test_long_string_preview() -> None:
         )
     )
 
-    result = service.preview(
-        "abcdefghij"
-    )
+    result = service.preview("abcdefghij")
 
     assert result == "abcde..."
 
@@ -95,16 +74,10 @@ def test_long_string_preview() -> None:
 def test_boolean_preview() -> None:
     service = LargeJsonService()
 
-    assert (
-        service.preview(True)
-        == "true"
-    )
+    assert service.preview(True) == "true"
 
 
 def test_null_preview() -> None:
     service = LargeJsonService()
 
-    assert (
-        service.preview(None)
-        == "null"
-    )
+    assert service.preview(None) == "null"

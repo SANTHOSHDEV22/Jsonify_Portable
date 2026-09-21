@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from jsonpath_ng.ext import parse
 from jsonpath_ng.exceptions import JsonPathParserError
+from jsonpath_ng.ext import parse
 
 from jsonify.core.models import JSONValue
 
@@ -53,16 +53,12 @@ class JsonPathService:
         expression = expression.strip()
 
         if not expression:
-            raise JsonPathQueryError(
-                "JSONPath expression cannot be empty."
-            )
+            raise JsonPathQueryError("JSONPath expression cannot be empty.")
 
         try:
             jsonpath_expression = parse(expression)
         except (JsonPathParserError, Exception) as error:
-            raise JsonPathQueryError(
-                f"Invalid JSONPath expression: {expression}"
-            ) from error
+            raise JsonPathQueryError(f"Invalid JSONPath expression: {expression}") from error
 
         matches = jsonpath_expression.find(payload)
 

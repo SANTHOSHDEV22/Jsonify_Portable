@@ -28,11 +28,7 @@ def test_get_json_response() -> None:
             },
         )
 
-    service = ApiService(
-        transport=httpx.MockTransport(
-            handler
-        )
-    )
+    service = ApiService(transport=httpx.MockTransport(handler))
 
     response = service.send(
         method="GET",
@@ -55,9 +51,7 @@ def test_post_json_body() -> None:
     ) -> httpx.Response:
         assert request.method == "POST"
 
-        body = json.loads(
-            request.content
-        )
+        body = json.loads(request.content)
 
         assert body == {
             "name": "Alice",
@@ -71,11 +65,7 @@ def test_post_json_body() -> None:
             },
         )
 
-    service = ApiService(
-        transport=httpx.MockTransport(
-            handler
-        )
-    )
+    service = ApiService(transport=httpx.MockTransport(handler))
 
     response = service.send(
         method="POST",
@@ -91,21 +81,14 @@ def test_custom_header() -> None:
     def handler(
         request: httpx.Request,
     ) -> httpx.Response:
-        assert (
-            request.headers["x-test"]
-            == "Jsonify"
-        )
+        assert request.headers["x-test"] == "Jsonify"
 
         return httpx.Response(
             200,
             json={"ok": True},
         )
 
-    service = ApiService(
-        transport=httpx.MockTransport(
-            handler
-        )
-    )
+    service = ApiService(transport=httpx.MockTransport(handler))
 
     service.send(
         method="GET",
@@ -128,11 +111,7 @@ def test_non_json_response() -> None:
             },
         )
 
-    service = ApiService(
-        transport=httpx.MockTransport(
-            handler
-        )
-    )
+    service = ApiService(transport=httpx.MockTransport(handler))
 
     response = service.send(
         method="GET",
@@ -142,10 +121,7 @@ def test_non_json_response() -> None:
     assert response.is_json is False
     assert response.json_data is None
 
-    assert (
-        response.text
-        == "Hello from server"
-    )
+    assert response.text == "Hello from server"
 
 
 def test_error_status_is_returned() -> None:
@@ -159,11 +135,7 @@ def test_error_status_is_returned() -> None:
             },
         )
 
-    service = ApiService(
-        transport=httpx.MockTransport(
-            handler
-        )
-    )
+    service = ApiService(transport=httpx.MockTransport(handler))
 
     response = service.send(
         method="GET",
@@ -181,9 +153,7 @@ def test_error_status_is_returned() -> None:
 def test_invalid_json_body() -> None:
     service = ApiService()
 
-    with pytest.raises(
-        ApiBodyError
-    ):
+    with pytest.raises(ApiBodyError):
         service.send(
             method="POST",
             url="https://example.com",
@@ -242,21 +212,14 @@ def test_response_headers() -> None:
             },
         )
 
-    service = ApiService(
-        transport=httpx.MockTransport(
-            handler
-        )
-    )
+    service = ApiService(transport=httpx.MockTransport(handler))
 
     response = service.send(
         method="GET",
         url="https://example.com",
     )
 
-    assert (
-        response.headers["x-request-id"]
-        == "abc123"
-    )
+    assert response.headers["x-request-id"] == "abc123"
 
 
 def test_json_array_response() -> None:
@@ -275,11 +238,7 @@ def test_json_array_response() -> None:
             ],
         )
 
-    service = ApiService(
-        transport=httpx.MockTransport(
-            handler
-        )
-    )
+    service = ApiService(transport=httpx.MockTransport(handler))
 
     response = service.send(
         method="GET",
@@ -292,3 +251,75 @@ def test_json_array_response() -> None:
         {"id": 1},
         {"id": 2},
     ]
+
+
+def _echo_service() -> ApiService:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "method": request.method,
+                "url": str(request.url),
+                "headers": dict(request.headers),
+                "body": request.content.decode(),
+            },
+        )
+
+    return ApiService(transport=httpx.MockTransport(handler))
+
+
+def test_head_and_options_supported() -> None:
+    service = _echo_service()
+
+    assert service.send(method="HEAD", url="https://x.test").status_code == 200
+    assert service.send(method="OPTIONS", url="https://x.test").status_code == 200
+
+
+def test_send_request_params_auth_and_size() -> None:
+    from jsonify.core.api_request import ApiAuth, ApiRequest
+
+    request = ApiRequest(
+        method="GET",
+        url="https://x.test/a",
+        params=[("q", "1")],
+        auth=ApiAuth(kind="bearer", token="tok"),
+    )
+
+    response = _echo_service().send_request(request)
+
+    assert "q=1" in response.json_data["url"]
+    assert response.json_data["headers"]["authorization"] == "Bearer tok"
+    assert response.size_bytes > 0
+
+
+def test_send_request_form_body() -> None:
+    from jsonify.core.api_request import ApiRequest
+
+    request = ApiRequest(
+        method="POST", url="https://x.test", body_kind="form", form_fields=[("a", "1")]
+    )
+
+    response = _echo_service().send_request(request)
+
+    assert response.json_data["body"] == "a=1"
+    assert response.json_data["headers"]["content-type"] == "application/x-www-form-urlencoded"
+
+
+def test_send_request_applies_environment_variables() -> None:
+    from jsonify.core.api_request import ApiRequest
+
+    response = _echo_service().send_request(
+        ApiRequest(url="{{base}}/x"), {"base": "https://dev.test"}
+    )
+
+    assert response.json_data["url"] == "https://dev.test/x"
+
+
+def test_compare_environments_reports_differences() -> None:
+    from jsonify.core.api_request import ApiRequest
+
+    result = _echo_service().compare_environments(
+        ApiRequest(url="{{base}}/x"), {"base": "https://dev.test"}, {"base": "https://prod.test"}
+    )
+
+    assert any("url" in d.path for d in result.differences)

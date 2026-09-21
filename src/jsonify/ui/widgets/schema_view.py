@@ -41,11 +41,7 @@ class SchemaView(QWidget):
     ) -> None:
         super().__init__(parent)
 
-        self._schema_service = (
-            schema_service
-            if schema_service is not None
-            else SchemaService()
-        )
+        self._schema_service = schema_service if schema_service is not None else SchemaService()
 
         self._payload: JSONValue | None = None
 
@@ -66,18 +62,13 @@ class SchemaView(QWidget):
 
         layout.addWidget(title)
 
-        description = QLabel(
-            "Validate the currently loaded JSON payload against "
-            "a JSON Schema."
-        )
+        description = QLabel("Validate the currently loaded JSON payload against a JSON Schema.")
 
         description.setWordWrap(True)
 
         layout.addWidget(description)
 
-        splitter = QSplitter(
-            Qt.Orientation.Horizontal
-        )
+        splitter = QSplitter(Qt.Orientation.Horizontal)
 
         payload_panel = self._create_payload_panel()
         schema_panel = self._create_schema_panel()
@@ -92,59 +83,41 @@ class SchemaView(QWidget):
 
         controls = QHBoxLayout()
 
-        self._validate_button = QPushButton(
-            "Validate"
-        )
+        self._validate_button = QPushButton("Validate")
 
-        self._validate_button.clicked.connect(
-            self._validate
-        )
+        self._validate_button.clicked.connect(self._validate)
 
-        example_button = QPushButton(
-            "Example Schema"
-        )
+        example_button = QPushButton("Example Schema")
 
-        example_button.clicked.connect(
-            self._load_example_schema
-        )
+        example_button.clicked.connect(self._load_example_schema)
 
-        clear_button = QPushButton(
-            "Clear Schema"
-        )
+        generate_button = QPushButton("Generate from Sample")
+        generate_button.setToolTip("Infer a JSON Schema from the currently loaded JSON payload")
+        generate_button.clicked.connect(self._generate_schema_from_payload)
 
-        clear_button.clicked.connect(
-            self._clear_schema
-        )
+        clear_button = QPushButton("Clear Schema")
 
-        self._status_label = QLabel(
-            "Load JSON and enter a schema."
-        )
+        clear_button.clicked.connect(self._clear_schema)
 
-        controls.addWidget(
-            self._validate_button
-        )
+        self._status_label = QLabel("Load JSON and enter a schema.")
 
-        controls.addWidget(
-            example_button
-        )
+        controls.addWidget(self._validate_button)
 
-        controls.addWidget(
-            clear_button
-        )
+        controls.addWidget(example_button)
+
+        controls.addWidget(generate_button)
+
+        controls.addWidget(clear_button)
 
         controls.addSpacing(15)
 
-        controls.addWidget(
-            self._status_label
-        )
+        controls.addWidget(self._status_label)
 
         controls.addStretch()
 
         layout.addLayout(controls)
 
-        errors_label = QLabel(
-            "Validation Results"
-        )
+        errors_label = QLabel("Validation Results")
 
         errors_font = errors_label.font()
         errors_font.setBold(True)
@@ -167,21 +140,13 @@ class SchemaView(QWidget):
             ]
         )
 
-        self._results_table.setAlternatingRowColors(
-            True
-        )
+        self._results_table.setAlternatingRowColors(True)
 
-        self._results_table.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows
-        )
+        self._results_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
 
-        self._results_table.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers
-        )
+        self._results_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
-        header = (
-            self._results_table.horizontalHeader()
-        )
+        header = self._results_table.horizontalHeader()
 
         header.setSectionResizeMode(
             0,
@@ -220,9 +185,7 @@ class SchemaView(QWidget):
 
         layout = QVBoxLayout(panel)
 
-        label = QLabel(
-            "Loaded JSON"
-        )
+        label = QLabel("Loaded JSON")
 
         label_font = label.font()
         label_font.setBold(True)
@@ -233,22 +196,14 @@ class SchemaView(QWidget):
 
         self._payload_editor.setReadOnly(True)
 
-        self._payload_editor.setPlaceholderText(
-            "Load JSON from Jsonify first."
-        )
+        self._payload_editor.setPlaceholderText("Load JSON from Jsonify first.")
 
-        self._payload_editor.setLineWrapMode(
-            QPlainTextEdit.LineWrapMode.NoWrap
-        )
+        self._payload_editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
-        self._payload_editor.setFont(
-            QFont(MONOSPACE_FONT)
-        )
+        self._payload_editor.setFont(QFont(MONOSPACE_FONT))
 
         layout.addWidget(label)
-        layout.addWidget(
-            self._payload_editor
-        )
+        layout.addWidget(self._payload_editor)
 
         return panel
 
@@ -259,9 +214,7 @@ class SchemaView(QWidget):
 
         layout = QVBoxLayout(panel)
 
-        label = QLabel(
-            "JSON Schema"
-        )
+        label = QLabel("JSON Schema")
 
         label_font = label.font()
         label_font.setBold(True)
@@ -270,22 +223,14 @@ class SchemaView(QWidget):
 
         self._schema_editor = QPlainTextEdit()
 
-        self._schema_editor.setPlaceholderText(
-            "Paste a JSON Schema here..."
-        )
+        self._schema_editor.setPlaceholderText("Paste a JSON Schema here...")
 
-        self._schema_editor.setLineWrapMode(
-            QPlainTextEdit.LineWrapMode.NoWrap
-        )
+        self._schema_editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
-        self._schema_editor.setFont(
-            QFont(MONOSPACE_FONT)
-        )
+        self._schema_editor.setFont(QFont(MONOSPACE_FONT))
 
         layout.addWidget(label)
-        layout.addWidget(
-            self._schema_editor
-        )
+        layout.addWidget(self._schema_editor)
 
         return panel
 
@@ -307,9 +252,7 @@ class SchemaView(QWidget):
 
         self._results_table.setRowCount(0)
 
-        self._status_label.setText(
-            "JSON loaded. Enter a schema and validate."
-        )
+        self._status_label.setText("JSON loaded. Enter a schema and validate.")
 
     def clear_payload(self) -> None:
         """Clear the loaded JSON payload."""
@@ -320,9 +263,7 @@ class SchemaView(QWidget):
 
         self._results_table.setRowCount(0)
 
-        self._status_label.setText(
-            "Load JSON and enter a schema."
-        )
+        self._status_label.setText("Load JSON and enter a schema.")
 
     def _validate(self) -> None:
         """Validate the loaded payload."""
@@ -335,11 +276,7 @@ class SchemaView(QWidget):
             )
             return
 
-        schema_text = (
-            self._schema_editor
-            .toPlainText()
-            .strip()
-        )
+        schema_text = self._schema_editor.toPlainText().strip()
 
         if not schema_text:
             QMessageBox.warning(
@@ -350,9 +287,7 @@ class SchemaView(QWidget):
             return
 
         try:
-            parsed_schema = json.loads(
-                schema_text
-            )
+            parsed_schema = json.loads(schema_text)
         except json.JSONDecodeError as error:
             QMessageBox.critical(
                 self,
@@ -378,11 +313,9 @@ class SchemaView(QWidget):
             return
 
         try:
-            result = (
-                self._schema_service.validate(
-                    payload=self._payload,
-                    schema=parsed_schema,
-                )
+            result = self._schema_service.validate(
+                payload=self._payload,
+                schema=parsed_schema,
             )
         except JsonSchemaError as error:
             QMessageBox.critical(
@@ -392,9 +325,7 @@ class SchemaView(QWidget):
             )
             return
 
-        self._display_result(
-            result
-        )
+        self._display_result(result)
 
     def _display_result(
         self,
@@ -405,32 +336,19 @@ class SchemaView(QWidget):
         self._results_table.setRowCount(0)
 
         if result.valid:
-            self._status_label.setText(
-                "✓ JSON is valid against the schema."
-            )
+            self._status_label.setText("✓ JSON is valid against the schema.")
 
-            self._status_label.setStyleSheet(
-                "color: #4EC9B0; font-weight: bold;"
-            )
+            self._status_label.setStyleSheet("color: #4EC9B0; font-weight: bold;")
 
             return
 
-        self._status_label.setText(
-            f"✗ Validation failed: "
-            f"{len(result.errors)} error(s)."
-        )
+        self._status_label.setText(f"✗ Validation failed: {len(result.errors)} error(s).")
 
-        self._status_label.setStyleSheet(
-            "color: #F44747; font-weight: bold;"
-        )
+        self._status_label.setStyleSheet("color: #F44747; font-weight: bold;")
 
-        self._results_table.setRowCount(
-            len(result.errors)
-        )
+        self._results_table.setRowCount(len(result.errors))
 
-        for row, error in enumerate(
-            result.errors
-        ):
+        for row, error in enumerate(result.errors):
             self._set_error_row(
                 row,
                 error,
@@ -443,44 +361,24 @@ class SchemaView(QWidget):
     ) -> None:
         """Insert one validation error."""
 
-        path_item = QTableWidgetItem(
-            error.path
-        )
+        path_item = QTableWidgetItem(error.path)
 
-        rule_item = QTableWidgetItem(
-            error.validator
-        )
+        rule_item = QTableWidgetItem(error.validator)
 
-        message_item = QTableWidgetItem(
-            error.message
-        )
+        message_item = QTableWidgetItem(error.message)
 
-        expected_item = QTableWidgetItem(
-            self._display_value(
-                error.expected
-            )
-        )
+        expected_item = QTableWidgetItem(self._display_value(error.expected))
 
-        actual_item = QTableWidgetItem(
-            self._display_value(
-                error.actual
-            )
-        )
+        actual_item = QTableWidgetItem(self._display_value(error.actual))
 
-        error_color = QColor(
-            "#F44747"
-        )
+        error_color = QColor("#F44747")
 
-        path_item.setForeground(
-            error_color
-        )
+        path_item.setForeground(error_color)
 
         path_font = path_item.font()
         path_font.setBold(True)
 
-        path_item.setFont(
-            path_font
-        )
+        path_item.setFont(path_font)
 
         self._results_table.setItem(
             row,
@@ -516,10 +414,7 @@ class SchemaView(QWidget):
         """Load a useful example JSON Schema."""
 
         example = {
-            "$schema": (
-                "https://json-schema.org/"
-                "draft/2020-12/schema"
-            ),
+            "$schema": ("https://json-schema.org/draft/2020-12/schema"),
             "type": "object",
             "properties": {
                 "id": {
@@ -550,6 +445,20 @@ class SchemaView(QWidget):
             )
         )
 
+    def _generate_schema_from_payload(self) -> None:
+        """Fill the schema editor with a schema inferred from the loaded payload."""
+
+        if self._payload is None:
+            QMessageBox.warning(
+                self, "No JSON Loaded", "Load a JSON payload before generating a schema."
+            )
+            return
+
+        schema = self._schema_service.generate_schema(self._payload)
+        self._schema_editor.setPlainText(json.dumps(schema, indent=2, ensure_ascii=False))
+        self._status_label.setText("Schema generated from the loaded payload.")
+        self._status_label.setStyleSheet("")
+
     def _clear_schema(self) -> None:
         """Clear schema and validation results."""
 
@@ -560,13 +469,9 @@ class SchemaView(QWidget):
         self._status_label.setStyleSheet("")
 
         if self._payload is None:
-            self._status_label.setText(
-                "Load JSON and enter a schema."
-            )
+            self._status_label.setText("Load JSON and enter a schema.")
         else:
-            self._status_label.setText(
-                "JSON loaded. Enter a schema and validate."
-            )
+            self._status_label.setText("JSON loaded. Enter a schema and validate.")
 
     @staticmethod
     def _display_value(
@@ -578,11 +483,7 @@ class SchemaView(QWidget):
             return "null"
 
         if isinstance(value, bool):
-            return (
-                "true"
-                if value
-                else "false"
-            )
+            return "true" if value else "false"
 
         if isinstance(
             value,

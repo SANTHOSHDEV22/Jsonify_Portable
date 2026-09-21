@@ -22,10 +22,7 @@ def user_schema() -> dict:
     """Create reusable user schema."""
 
     return {
-        "$schema": (
-            "https://json-schema.org/"
-            "draft/2020-12/schema"
-        ),
+        "$schema": ("https://json-schema.org/draft/2020-12/schema"),
         "type": "object",
         "properties": {
             "id": {
@@ -110,10 +107,7 @@ def test_missing_required_property(
 
     assert result.valid is False
 
-    assert any(
-        error.validator == "required"
-        for error in result.errors
-    )
+    assert any(error.validator == "required" for error in result.errors)
 
 
 def test_minimum_value(
@@ -133,11 +127,7 @@ def test_minimum_value(
 
     assert result.valid is False
 
-    assert any(
-        error.path == "$.age"
-        and error.validator == "minimum"
-        for error in result.errors
-    )
+    assert any(error.path == "$.age" and error.validator == "minimum" for error in result.errors)
 
 
 def test_additional_property(
@@ -157,11 +147,7 @@ def test_additional_property(
 
     assert result.valid is False
 
-    assert any(
-        error.validator
-        == "additionalProperties"
-        for error in result.errors
-    )
+    assert any(error.validator == "additionalProperties" for error in result.errors)
 
 
 def test_nested_validation(
@@ -248,9 +234,7 @@ def test_invalid_schema(
         "type": "not-a-real-type",
     }
 
-    with pytest.raises(
-        JsonSchemaError
-    ):
+    with pytest.raises(JsonSchemaError):
         service.validate(
             {},
             schema,
@@ -289,9 +273,7 @@ def test_validate_text(
 def test_schema_must_be_object(
     service: SchemaService,
 ) -> None:
-    with pytest.raises(
-        JsonSchemaError
-    ):
+    with pytest.raises(JsonSchemaError):
         service.validate_text(
             "{}",
             "[]",

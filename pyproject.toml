@@ -21,14 +21,14 @@ name = "jsonify"
 version = "1.0.0"
 description = "Desktop application for exploring and visualizing JSON payloads"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 
 dependencies = [
     "PySide6>=6.6",
     "jsonpath-ng>=1.7",
     "jsonschema>=4.23",
     "httpx>=0.28",
-    "cryptography>=43.0",
+    "PyYAML>=6.0",
 ]
 
 
@@ -42,6 +42,10 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.8",
     "mypy>=1.13",
+    "types-PyYAML",
+]
+build = [
+    "pyinstaller>=6.0",
 ]
 
 
@@ -127,7 +131,7 @@ exclude_lines = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 src = ["src", "tests"]
 
 
@@ -142,6 +146,10 @@ select = [
 
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+# Embedded HTML/JS templates contain long lines that are not worth wrapping.
+"src/jsonify/ui/widgets/advanced_graph_view.py" = ["E501"]
+
 
 # ------------------------------------------------------------
 # Ruff formatter
@@ -155,21 +163,28 @@ line-ending = "auto"
 
 # ------------------------------------------------------------
 # Mypy configuration
+#
+# Type-checking covers the pure-Python layers (core, services, CLI).
+# The Qt widget layer is excluded on purpose: PySide6 method overrides
+# (rowCount, index, parent, ...) don't satisfy mypy's override checks,
+# which would drown real problems in noise.
 # ------------------------------------------------------------
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 
 files = [
-    "src/jsonify",
+    "src/jsonify/core",
+    "src/jsonify/services",
+    "src/jsonify/cli.py",
+    "src/jsonify/__main__.py",
 ]
 
-strict = true
-
-warn_return_any = true
+check_untyped_defs = true
+ignore_missing_imports = true
 warn_unused_configs = true
-warn_unreachable = true
-
+warn_unused_ignores = true
+warn_redundant_casts = true
 show_error_codes = true
 pretty = true
 

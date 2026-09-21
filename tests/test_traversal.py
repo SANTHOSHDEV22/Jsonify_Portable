@@ -6,6 +6,7 @@ from jsonify.core.traversal import (
     calculate_json_stats,
     extract_unique_keys,
     find_values_by_key,
+    to_table_rows,
 )
 
 
@@ -262,6 +263,10 @@ def test_calculate_json_stats_empty_object() -> None:
         "leaves": 0,
         "max_depth": 0,
         "keys": 0,
+        "nulls": 0,
+        "booleans": 0,
+        "strings": 0,
+        "numbers": 0,
     }
 
 
@@ -276,6 +281,10 @@ def test_calculate_json_stats_empty_array() -> None:
         "leaves": 0,
         "max_depth": 0,
         "keys": 0,
+        "nulls": 0,
+        "booleans": 0,
+        "strings": 0,
+        "numbers": 0,
     }
 
 
@@ -290,4 +299,65 @@ def test_calculate_json_stats_primitive() -> None:
         "leaves": 1,
         "max_depth": 0,
         "keys": 0,
+        "nulls": 0,
+        "booleans": 0,
+        "strings": 1,
+        "numbers": 0,
     }
+
+
+def test_calculate_json_stats_type_breakdown() -> None:
+    """Leaf values should be broken down by JSON type."""
+
+    payload = {
+        "a": None,
+        "b": True,
+        "c": False,
+        "d": "text",
+        "e": 42,
+        "f": 3.14,
+    }
+
+    result = calculate_json_stats(payload)
+
+    assert result["nulls"] == 1
+    assert result["booleans"] == 2
+    assert result["strings"] == 1
+    assert result["numbers"] == 2
+
+
+def test_to_table_rows_basic() -> None:
+    """Flatten an array of objects into columns and rows."""
+
+    payload = [
+        {"id": 1, "name": "Alice"},
+        {"id": 2, "name": "Bob"},
+    ]
+
+    columns, rows = to_table_rows(payload)
+
+    assert columns == ["id", "name"]
+    assert rows == [[1, "Alice"], [2, "Bob"]]
+
+
+def test_to_table_rows_missing_columns() -> None:
+    """Rows missing a column should get None for that cell."""
+
+    payload = [
+        {"id": 1, "name": "Alice"},
+        {"id": 2},
+    ]
+
+    columns, rows = to_table_rows(payload)
+
+    assert columns == ["id", "name"]
+    assert rows == [[1, "Alice"], [2, None]]
+
+
+def test_to_table_rows_non_list_input() -> None:
+    """Non-array input should produce no columns or rows."""
+
+    columns, rows = to_table_rows({"a": 1})
+
+    assert columns == []
+    assert rows == []

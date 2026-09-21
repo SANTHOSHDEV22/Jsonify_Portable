@@ -13,9 +13,7 @@ def test_simple_object() -> None:
         "age": 25,
     }
 
-    result = analyze_json(
-        payload
-    )
+    result = analyze_json(payload)
 
     assert result.total_nodes == 3
     assert result.containers == 1
@@ -32,9 +30,7 @@ def test_nested_object() -> None:
         }
     }
 
-    result = analyze_json(
-        payload
-    )
+    result = analyze_json(payload)
 
     assert result.total_nodes == 4
     assert result.containers == 3
@@ -49,9 +45,7 @@ def test_array() -> None:
         3,
     ]
 
-    result = analyze_json(
-        payload
-    )
+    result = analyze_json(payload)
 
     assert result.total_nodes == 4
     assert result.containers == 1
@@ -70,9 +64,7 @@ def test_nested_array() -> None:
         ]
     }
 
-    result = analyze_json(
-        payload
-    )
+    result = analyze_json(payload)
 
     assert result.total_nodes == 6
     assert result.containers == 4
@@ -81,9 +73,7 @@ def test_nested_array() -> None:
 
 
 def test_null() -> None:
-    result = analyze_json(
-        None
-    )
+    result = analyze_json(None)
 
     assert result.total_nodes == 1
     assert result.containers == 0
@@ -98,9 +88,7 @@ def test_deep_json_does_not_use_recursion() -> None:
             "child": payload,
         }
 
-    result = analyze_json(
-        payload
-    )
+    result = analyze_json(payload)
 
     assert result.total_nodes == 2_001
     assert result.max_depth == 2_000

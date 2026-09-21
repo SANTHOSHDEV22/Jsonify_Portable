@@ -49,9 +49,7 @@ DEFAULT_SENSITIVE_FIELDS: frozenset[str] = frozenset(
     }
 )
 
-_EMAIL_PATTERN = re.compile(
-    r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
-)
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def mask_json(
@@ -64,10 +62,7 @@ def mask_json(
     The original payload is never modified.
     """
 
-    rule_map = {
-        rule.field_name.casefold(): rule
-        for rule in rules
-    }
+    rule_map = {rule.field_name.casefold(): rule for rule in rules}
 
     copied_payload = deepcopy(payload)
 
@@ -152,9 +147,7 @@ def _mask_value(
         result: dict[str, JSONValue] = {}
 
         for key, child in value.items():
-            rule = rules.get(
-                key.casefold()
-            )
+            rule = rules.get(key.casefold())
 
             if rule is not None:
                 result[key] = mask_value(
@@ -189,10 +182,7 @@ def _collect_sensitive_fields(
 
     if isinstance(value, dict):
         for key, child in value.items():
-            if (
-                key.casefold()
-                in DEFAULT_SENSITIVE_FIELDS
-            ):
+            if key.casefold() in DEFAULT_SENSITIVE_FIELDS:
                 found.add(key)
 
             _collect_sensitive_fields(
@@ -266,26 +256,16 @@ def _mask_partial(
         return "*"
 
     if length <= 4:
-        return (
-            value[0]
-            + ("*" * (length - 2))
-            + value[-1]
-        )
+        return value[0] + ("*" * (length - 2)) + value[-1]
 
     visible = min(
         2,
         max(1, length // 4),
     )
 
-    hidden_length = (
-        length - (visible * 2)
-    )
+    hidden_length = length - (visible * 2)
 
-    return (
-        value[:visible]
-        + ("*" * hidden_length)
-        + value[-visible:]
-    )
+    return value[:visible] + ("*" * hidden_length) + value[-visible:]
 
 
 def _mask_email(
@@ -312,14 +292,9 @@ def _mask_email(
     if len(local_part) == 1:
         masked_local = "*"
     else:
-        masked_local = (
-            local_part[0]
-            + ("*" * (len(local_part) - 1))
-        )
+        masked_local = local_part[0] + ("*" * (len(local_part) - 1))
 
-    return (
-        f"{masked_local}@{domain}"
-    )
+    return f"{masked_local}@{domain}"
 
 
 def _primitive_to_text(
@@ -328,10 +303,6 @@ def _primitive_to_text(
     """Convert a primitive JSON value to text."""
 
     if isinstance(value, bool):
-        return (
-            "true"
-            if value
-            else "false"
-        )
+        return "true" if value else "false"
 
     return str(value)

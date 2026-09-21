@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from jsonify.core.models import JSONValue
-
 
 SESSION_FORMAT = "jsonify-session"
 SESSION_VERSION = 1
@@ -19,6 +18,10 @@ class SessionWorkspace:
 
     selected_tab: str = ""
     jsonpath_query: str = ""
+    bookmarks: list[str] = field(default_factory=list)
+    """JSON Pointers of bookmarked nodes."""
+    annotations: dict[str, str] = field(default_factory=dict)
+    """JSON Pointer -> local note."""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert workspace state to serializable data."""
@@ -26,6 +29,8 @@ class SessionWorkspace:
         return {
             "selected_tab": self.selected_tab,
             "jsonpath_query": self.jsonpath_query,
+            "bookmarks": list(self.bookmarks),
+            "annotations": dict(self.annotations),
         }
 
     @classmethod
@@ -36,12 +41,12 @@ class SessionWorkspace:
         """Create workspace state from serialized data."""
 
         return cls(
-            selected_tab=str(
-                data.get("selected_tab", "")
-            ),
-            jsonpath_query=str(
-                data.get("jsonpath_query", "")
-            ),
+            selected_tab=str(data.get("selected_tab", "")),
+            jsonpath_query=str(data.get("jsonpath_query", "")),
+            bookmarks=[str(item) for item in _as_list(data.get("bookmarks"))],
+            annotations={
+                str(key): str(value) for key, value in _as_dict(data.get("annotations")).items()
+            },
         )
 
 
@@ -51,15 +56,9 @@ class JsonifySession:
 
     name: str
     payload: JSONValue
-    workspace: SessionWorkspace = field(
-        default_factory=SessionWorkspace
-    )
-    created_at: str = field(
-        default_factory=lambda: _utc_now()
-    )
-    updated_at: str = field(
-        default_factory=lambda: _utc_now()
-    )
+    workspace: SessionWorkspace = field(default_factory=SessionWorkspace)
+    created_at: str = field(default_factory=lambda: _utc_now())
+    updated_at: str = field(default_factory=lambda: _utc_now())
 
     def to_dict(self) -> dict[str, Any]:
         """Convert the session to serializable data."""
@@ -93,13 +92,9 @@ class JsonifySession:
             workspace_data = {}
 
         return cls(
-            name=str(
-                data.get("name", "Untitled Session")
-            ),
+            name=str(data.get("name", "Untitled Session")),
             payload=data.get("payload"),
-            workspace=SessionWorkspace.from_dict(
-                workspace_data
-            ),
+            workspace=SessionWorkspace.from_dict(workspace_data),
             created_at=str(
                 data.get(
                     "created_at",
@@ -115,9 +110,15 @@ class JsonifySession:
         )
 
 
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _as_dict(value: Any) -> dict[Any, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def _utc_now() -> str:
     """Return the current UTC time as ISO 8601."""
 
-    return datetime.now(
-        timezone.utc
-    ).isoformat()
+    return datetime.now(UTC).isoformat()

@@ -71,10 +71,7 @@ def test_array_names(
         "$.users[*].name",
     )
 
-    assert [
-        result.value
-        for result in results
-    ] == [
+    assert [result.value for result in results] == [
         "Alice",
         "Bob",
         "Charlie",
@@ -90,10 +87,7 @@ def test_array_ids(
         "$.users[*].id",
     )
 
-    assert [
-        result.value
-        for result in results
-    ] == [
+    assert [result.value for result in results] == [
         1,
         2,
         3,
@@ -109,10 +103,7 @@ def test_recursive_name_search(
         "$..name",
     )
 
-    values = [
-        result.value
-        for result in results
-    ]
+    values = [result.value for result in results]
 
     assert "Alice" in values
     assert "Bob" in values
@@ -151,9 +142,7 @@ def test_empty_expression(
     service: JsonPathService,
     payload: dict,
 ) -> None:
-    with pytest.raises(
-        JsonPathQueryError
-    ):
+    with pytest.raises(JsonPathQueryError):
         service.query(
             payload,
             "",
@@ -164,9 +153,7 @@ def test_whitespace_expression(
     service: JsonPathService,
     payload: dict,
 ) -> None:
-    with pytest.raises(
-        JsonPathQueryError
-    ):
+    with pytest.raises(JsonPathQueryError):
         service.query(
             payload,
             "     ",
@@ -177,9 +164,7 @@ def test_invalid_expression(
     service: JsonPathService,
     payload: dict,
 ) -> None:
-    with pytest.raises(
-        JsonPathQueryError
-    ):
+    with pytest.raises(JsonPathQueryError):
         service.query(
             payload,
             "$.users[[",
@@ -195,10 +180,7 @@ def test_filter_expression(
         "$.users[?(@.active == true)].name",
     )
 
-    assert [
-        result.value
-        for result in results
-    ] == [
+    assert [result.value for result in results] == [
         "Alice",
         "Charlie",
     ]
@@ -215,7 +197,4 @@ def test_result_contains_path(
 
     assert len(results) == 3
 
-    assert all(
-        result.path.startswith("$")
-        for result in results
-    )
+    assert all(result.path.startswith("$") for result in results)

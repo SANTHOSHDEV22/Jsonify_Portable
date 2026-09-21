@@ -21,9 +21,7 @@ class MaskingService:
     ) -> list[str]:
         """Return all unique field names."""
 
-        return extract_field_names(
-            payload
-        )
+        return extract_field_names(payload)
 
     def detect_fields(
         self,
@@ -31,9 +29,7 @@ class MaskingService:
     ) -> list[str]:
         """Return likely sensitive field names."""
 
-        return detect_sensitive_fields(
-            payload
-        )
+        return detect_sensitive_fields(payload)
 
     def mask(
         self,
@@ -45,19 +41,9 @@ class MaskingService:
     ) -> JSONValue:
         """Mask selected fields."""
 
-        email_fields = {
-            field.casefold()
-            for field in (
-                email_fields or set()
-            )
-        }
+        email_fields = {field.casefold() for field in (email_fields or set())}
 
-        partial_fields = {
-            field.casefold()
-            for field in (
-                partial_fields or set()
-            )
-        }
+        partial_fields = {field.casefold() for field in (partial_fields or set())}
 
         rules: list[MaskingRule] = []
 

@@ -1,8 +1,0 @@
-fastapi
-uvicorn[standard]
-httpx
-cryptography
-python-dotenv
-pydantic[email]
-SQLAlchemy>=2.0
-pyodbc

@@ -1,13 +1,12 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{18b6997e-4477-481e-ab1b-bc1c63984d7b}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>
-    </StartupFile>
-    <SearchPath />
+    <StartupFile>src\jsonify\__main__.py</StartupFile>
+    <SearchPath>src</SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
@@ -22,37 +21,30 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include=".gitignore" />
-    <Content Include="Jsonify-License-Server\.env" />
-    <Content Include="Jsonify-License-Server\.env.example" />
-    <Content Include="Jsonify-License-Server\.gitignore" />
-    <Content Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\FileContentIndex\11c930ac-1463-4c01-a307-c726c28e74f2.vsidx" />
-    <Content Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\v18\.wsuo" />
-    <Content Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\v18\DocumentLayout.json" />
-    <Content Include="Jsonify-License-Server\.vs\ProjectSettings.json" />
-    <Content Include="Jsonify-License-Server\.vs\slnx.sqlite" />
-    <Content Include="Jsonify-License-Server\.vs\VSWorkspaceState.json" />
-    <Content Include="Jsonify-License-Server\README.md" />
-    <Content Include="Jsonify-License-Server\requirements.txt" />
-    <Content Include="Jsonify-License-Server\secrets\README.txt" />
     <Content Include="Jsonify.spec" />
     <Content Include="pyproject.toml" />
     <Content Include="requirements.txt" />
     <Content Include="run_jsonify.cmd" />
-    <Content Include="src\jsonify\resources\license_public.pem" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Jsonify-License-Server\app\database.py" />
-    <Compile Include="Jsonify-License-Server\app\main.py" />
-    <Compile Include="Jsonify-License-Server\app\models.py" />
-    <Compile Include="Jsonify-License-Server\app\repositories\license_repository.py" />
-    <Compile Include="Jsonify-License-Server\app\repositories\__init__.py" />
-    <Compile Include="Jsonify-License-Server\app\__init__.py" />
+    <Compile Include="src\jsonify\core\analyzer.py" />
+    <Compile Include="src\jsonify\core\breaking_changes.py" />
+    <Compile Include="src\jsonify\core\codegen.py" />
+    <Compile Include="src\jsonify\core\converters.py" />
     <Compile Include="src\jsonify\core\diff.py" />
+    <Compile Include="src\jsonify\core\diff_report.py" />
+    <Compile Include="src\jsonify\core\filter.py" />
+    <Compile Include="src\jsonify\core\formatter.py" />
+    <Compile Include="src\jsonify\core\jq.py" />
     <Compile Include="src\jsonify\core\large_json.py" />
-    <Compile Include="src\jsonify\core\licensing.py" />
     <Compile Include="src\jsonify\core\masking.py" />
     <Compile Include="src\jsonify\core\models.py" />
+    <Compile Include="src\jsonify\core\openapi.py" />
     <Compile Include="src\jsonify\core\parser.py" />
+    <Compile Include="src\jsonify\core\pointer.py" />
+    <Compile Include="src\jsonify\core\repair.py" />
+    <Compile Include="src\jsonify\core\schema_inference.py" />
+    <Compile Include="src\jsonify\core\search.py" />
     <Compile Include="src\jsonify\core\session.py" />
     <Compile Include="src\jsonify\core\traversal.py" />
     <Compile Include="src\jsonify\core\__init__.py" />
@@ -65,63 +57,71 @@
     <Compile Include="src\jsonify\services\jsonpath_service.py" />
     <Compile Include="src\jsonify\services\json_service.py" />
     <Compile Include="src\jsonify\services\large_json_service.py" />
-    <Compile Include="src\jsonify\services\license_factory.py" />
-    <Compile Include="src\jsonify\services\license_purchase_service.py" />
-    <Compile Include="src\jsonify\services\license_service.py" />
-    <Compile Include="src\jsonify\services\license_storage.py" />
     <Compile Include="src\jsonify\services\masking_service.py" />
+    <Compile Include="src\jsonify\services\openapi_service.py" />
     <Compile Include="src\jsonify\services\schema_service.py" />
     <Compile Include="src\jsonify\services\session_service.py" />
+    <Compile Include="src\jsonify\services\workspace_state_service.py" />
     <Compile Include="src\jsonify\services\__init__.py" />
     <Compile Include="src\jsonify\ui\constants.py" />
     <Compile Include="src\jsonify\ui\main_window.py" />
+    <Compile Include="src\jsonify\ui\theme.py" />
     <Compile Include="src\jsonify\ui\widgets\advanced_graph_view.py" />
     <Compile Include="src\jsonify\ui\widgets\api_view.py" />
+    <Compile Include="src\jsonify\ui\widgets\code_editor.py" />
+    <Compile Include="src\jsonify\ui\widgets\codegen_view.py" />
+    <Compile Include="src\jsonify\ui\widgets\command_palette.py" />
+    <Compile Include="src\jsonify\ui\widgets\converters_view.py" />
     <Compile Include="src\jsonify\ui\widgets\diff_view.py" />
+    <Compile Include="src\jsonify\ui\widgets\document_tab.py" />
     <Compile Include="src\jsonify\ui\widgets\export_view.py" />
     <Compile Include="src\jsonify\ui\widgets\graph_view.py" />
     <Compile Include="src\jsonify\ui\widgets\hierarchy_view.py" />
+    <Compile Include="src\jsonify\ui\widgets\jq_view.py" />
     <Compile Include="src\jsonify\ui\widgets\jsonpath_view.py" />
     <Compile Include="src\jsonify\ui\widgets\lazy_tree_view.py" />
-    <Compile Include="src\jsonify\ui\widgets\license_view.py" />
     <Compile Include="src\jsonify\ui\widgets\masking_view.py" />
+    <Compile Include="src\jsonify\ui\widgets\openapi_view.py" />
     <Compile Include="src\jsonify\ui\widgets\schema_view.py" />
     <Compile Include="src\jsonify\ui\widgets\tree_view.py" />
+    <Compile Include="src\jsonify\ui\widgets\welcome_view.py" />
     <Compile Include="src\jsonify\ui\widgets\_d3_source.py" />
     <Compile Include="src\jsonify\ui\widgets\__init__.py" />
     <Compile Include="src\jsonify\ui\__init__.py" />
     <Compile Include="src\jsonify\__init__.py" />
     <Compile Include="src\jsonify\__main__.py" />
     <Compile Include="tests\test_advanced_graph_service.py" />
+    <Compile Include="tests\test_analyzer.py" />
     <Compile Include="tests\test_api_service.py" />
+    <Compile Include="tests\test_breaking_changes.py" />
+    <Compile Include="tests\test_codegen.py" />
+    <Compile Include="tests\test_converters.py" />
     <Compile Include="tests\test_diff.py" />
+    <Compile Include="tests\test_diff_report.py" />
     <Compile Include="tests\test_export_service.py" />
+    <Compile Include="tests\test_filter.py" />
+    <Compile Include="tests\test_formatter.py" />
+    <Compile Include="tests\test_jq.py" />
     <Compile Include="tests\test_graph_service.py" />
     <Compile Include="tests\test_jsonpath_service.py" />
     <Compile Include="tests\test_json_service.py" />
     <Compile Include="tests\test_large_json.py" />
     <Compile Include="tests\test_large_json_service.py" />
-    <Compile Include="tests\test_license_service.py" />
     <Compile Include="tests\test_masking.py" />
     <Compile Include="tests\test_masking_service.py" />
+    <Compile Include="tests\test_openapi.py" />
+    <Compile Include="tests\test_openapi_service.py" />
     <Compile Include="tests\test_parser.py" />
+    <Compile Include="tests\test_pointer.py" />
+    <Compile Include="tests\test_repair.py" />
+    <Compile Include="tests\test_schema_inference.py" />
     <Compile Include="tests\test_schema_service.py" />
+    <Compile Include="tests\test_search.py" />
     <Compile Include="tests\test_session_service.py" />
     <Compile Include="tests\test_traversal.py" />
     <Compile Include="tests\__init__.py" />
-    <Compile Include="tools\generate_license_keys.py" />
-    <Compile Include="tools\issue_license.py" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Jsonify-License-Server\" />
-    <Folder Include="Jsonify-License-Server\.vs\" />
-    <Folder Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\" />
-    <Folder Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\FileContentIndex\" />
-    <Folder Include="Jsonify-License-Server\.vs\Jsonify-License-Server.slnx\v18\" />
-    <Folder Include="Jsonify-License-Server\app\" />
-    <Folder Include="Jsonify-License-Server\app\repositories\" />
-    <Folder Include="Jsonify-License-Server\secrets\" />
-    <Folder Include="tools\" />
     <Folder Include="tests\" />
     <Folder Include="src\" />
     <Folder Include="src\jsonify\" />

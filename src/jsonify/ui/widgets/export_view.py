@@ -22,7 +22,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from jsonify.core.converters import ConversionError, json_to_csv
 from jsonify.core.models import JSONValue
+from jsonify.core.sensitive import safe_mask
 from jsonify.services.export_service import ExportError, ExportService
 from jsonify.ui.constants import MONOSPACE_FONT
 
@@ -39,9 +41,7 @@ class ExportView(QWidget):
     ) -> None:
         super().__init__(parent)
 
-        self._export_service = (
-            export_service if export_service is not None else ExportService()
-        )
+        self._export_service = export_service if export_service is not None else ExportService()
 
         self._payload: JSONValue | None = None
         self._masked_payload: JSONValue | None = None
@@ -61,9 +61,7 @@ class ExportView(QWidget):
         title.setFont(title_font)
         layout.addWidget(title)
 
-        description = QLabel(
-            "Export JSON data or the current graph to a file."
-        )
+        description = QLabel("Export JSON data or the current graph to a file.")
         description.setWordWrap(True)
         layout.addWidget(description)
 
@@ -73,6 +71,8 @@ class ExportView(QWidget):
         self._export_type = QComboBox()
         self._export_type.addItem("Formatted JSON", "json")
         self._export_type.addItem("Masked JSON", "masked_json")
+        self._export_type.addItem("Safe JSON (auto-mask detected data)", "safe_json")
+        self._export_type.addItem("CSV (array of objects)", "csv")
         self._export_type.addItem("Graph SVG", "svg")
         self._export_type.addItem("Graph PNG", "png")
         self._export_type.addItem("Graph PDF", "pdf")
@@ -93,27 +93,21 @@ class ExportView(QWidget):
 
         self._preview = QPlainTextEdit()
         self._preview.setReadOnly(True)
-        self._preview.setLineWrapMode(
-            QPlainTextEdit.LineWrapMode.NoWrap
-        )
+        self._preview.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self._preview.setFont(QFont(MONOSPACE_FONT))
         layout.addWidget(self._preview, 1)
 
         self._status_label = QLabel("Load JSON to begin.")
         layout.addWidget(self._status_label)
 
-        self._export_type.currentIndexChanged.connect(
-            self._refresh_preview
-        )
+        self._export_type.currentIndexChanged.connect(self._refresh_preview)
 
     def set_payload(self, payload: JSONValue) -> None:
         """Set the currently loaded JSON payload."""
 
         self._payload = payload
         self._refresh_preview()
-        self._status_label.setText(
-            "JSON loaded. Choose an export format."
-        )
+        self._status_label.setText("JSON loaded. Choose an export format.")
 
     def set_masked_payload(
         self,
@@ -144,11 +138,20 @@ class ExportView(QWidget):
 
         if export_type == "masked_json":
             payload = self._masked_payload
+        elif export_type == "safe_json":
+            payload = safe_mask(self._payload)[0] if self._payload is not None else None
         else:
             payload = self._payload
 
         if payload is None:
             self._preview.clear()
+            return
+
+        if export_type == "csv":
+            try:
+                self._preview.setPlainText(json_to_csv(payload))
+            except ConversionError as error:
+                self._preview.setPlainText(str(error))
             return
 
         self._preview.setPlainText(
@@ -170,6 +173,14 @@ class ExportView(QWidget):
 
         if export_type == "masked_json":
             self._export_masked_json()
+            return
+
+        if export_type == "safe_json":
+            self._export_safe_json()
+            return
+
+        if export_type == "csv":
+            self._export_csv()
             return
 
         if export_type in {"svg", "png", "pdf"}:
@@ -251,13 +262,9 @@ class ExportView(QWidget):
             exist_ok=True,
         )
 
-        timestamp = datetime.now().strftime(
-            "%Y%m%d_%H%M%S_%f"
-        )
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
-        return downloads / (
-            f"{prefix}_{timestamp}.{extension}"
-        )
+        return downloads / (f"{prefix}_{timestamp}.{extension}")
 
     @staticmethod
     def _verify_export(file_path: Path) -> Path:
@@ -266,10 +273,7 @@ class ExportView(QWidget):
         resolved_path = file_path.resolve()
 
         if not resolved_path.is_file():
-            raise ExportError(
-                "Export completed but the file was not created at: "
-                f"{resolved_path}"
-            )
+            raise ExportError(f"Export completed but the file was not created at: {resolved_path}")
 
         return resolved_path
 
@@ -300,9 +304,52 @@ class ExportView(QWidget):
             self._show_error(error)
             return
 
+        self._status_label.setText(f"Exported successfully: {path}")
+
+    def _export_safe_json(self) -> None:
+        """Export the payload with every detected sensitive value masked."""
+
+        if self._payload is None:
+            QMessageBox.warning(self, "Export", "Load JSON before exporting.")
+            return
+
+        masked, findings = safe_mask(self._payload)
+        file_path = self._downloads_path("jsonify_safe", "json")
+
+        try:
+            self._export_service.export_json(masked, file_path)
+            path = self._verify_export(file_path)
+        except (ExportError, OSError) as error:
+            self._show_error(error)
+            return
+
         self._status_label.setText(
-            f"Exported successfully: {path}"
+            f"Exported successfully ({len(findings)} value(s) masked): {path}"
         )
+
+    def _export_csv(self) -> None:
+        """Export an array of objects as CSV."""
+
+        if self._payload is None:
+            QMessageBox.warning(self, "Export", "Load JSON before exporting.")
+            return
+
+        try:
+            content = json_to_csv(self._payload)
+        except ConversionError as error:
+            QMessageBox.warning(self, "Export CSV", str(error))
+            return
+
+        file_path = self._downloads_path("jsonify_export", "csv")
+
+        try:
+            self._export_service.export_text(content, file_path, extension="csv")
+            path = self._verify_export(file_path)
+        except (ExportError, OSError) as error:
+            self._show_error(error)
+            return
+
+        self._status_label.setText(f"Exported successfully: {path}")
 
     def _export_masked_json(self) -> None:
         """Export the latest masked JSON directly to Downloads."""
@@ -311,10 +358,7 @@ class ExportView(QWidget):
             QMessageBox.warning(
                 self,
                 "Export",
-                (
-                    "Create a masked JSON result "
-                    "before exporting it."
-                ),
+                ("Create a masked JSON result before exporting it."),
             )
             return
 
@@ -334,9 +378,7 @@ class ExportView(QWidget):
             self._show_error(error)
             return
 
-        self._status_label.setText(
-            f"Exported successfully: {path}"
-        )
+        self._status_label.setText(f"Exported successfully: {path}")
 
     def _export_graph(
         self,
@@ -345,9 +387,7 @@ class ExportView(QWidget):
         """Export the current graph directly to Downloads."""
 
         if self._graph_view is None:
-            self.show_export_error(
-                "Graph view is not available for export."
-            )
+            self.show_export_error("Graph view is not available for export.")
             return
 
         file_path = self._downloads_path(
@@ -355,9 +395,7 @@ class ExportView(QWidget):
             export_type,
         )
 
-        self._status_label.setText(
-            f"Exporting graph to: {file_path.resolve()}"
-        )
+        self._status_label.setText(f"Exporting graph to: {file_path.resolve()}")
         self._export_button.setEnabled(False)
 
         def success(path: str) -> None:
@@ -385,14 +423,11 @@ class ExportView(QWidget):
 
         if not path.is_file():
             self.show_export_error(
-                "Graph export reported success, but the file "
-                f"was not created at: {path.resolve()}"
+                f"Graph export reported success, but the file was not created at: {path.resolve()}"
             )
             return
 
-        self._status_label.setText(
-            f"Graph exported successfully: {path.resolve()}"
-        )
+        self._status_label.setText(f"Graph exported successfully: {path.resolve()}")
 
     def show_export_error(
         self,

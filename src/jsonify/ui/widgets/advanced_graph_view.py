@@ -11,6 +11,9 @@ from importlib.resources import files
 from PySide6.QtCore import QByteArray, Qt, QUrl
 from PySide6.QtGui import QImage, QPainter, QPdfWriter
 from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtWebEngineWidgets import (
+    QWebEngineView,
+)
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -21,9 +24,6 @@ from PySide6.QtWidgets import (
     QSlider,
     QVBoxLayout,
     QWidget,
-)
-from PySide6.QtWebEngineWidgets import (
-    QWebEngineView,
 )
 
 from jsonify.core.models import JSONValue
@@ -59,57 +59,31 @@ class AdvancedGraphView(QWidget):
 
         self._search = QLineEdit()
 
-        self._search.setPlaceholderText(
-            "Search node, value or JSON path..."
-        )
+        self._search.setPlaceholderText("Search node, value or JSON path...")
 
-        search_button = QPushButton(
-            "Search"
-        )
+        search_button = QPushButton("Search")
 
-        search_button.clicked.connect(
-            self._search_graph
-        )
+        search_button.clicked.connect(self._search_graph)
 
-        reset_button = QPushButton(
-            "Reset"
-        )
+        reset_button = QPushButton("Reset")
 
-        reset_button.clicked.connect(
-            self._reset_graph
-        )
+        reset_button.clicked.connect(self._reset_graph)
 
-        fit_button = QPushButton(
-            "Fit"
-        )
+        fit_button = QPushButton("Fit")
 
-        fit_button.clicked.connect(
-            self._fit_graph
-        )
+        fit_button.clicked.connect(self._fit_graph)
 
-        expand_button = QPushButton(
-            "Expand All"
-        )
+        expand_button = QPushButton("Expand All")
 
-        expand_button.clicked.connect(
-            self._expand_all
-        )
+        expand_button.clicked.connect(self._expand_all)
 
-        collapse_button = QPushButton(
-            "Collapse All"
-        )
+        collapse_button = QPushButton("Collapse All")
 
-        collapse_button.clicked.connect(
-            self._collapse_all
-        )
+        collapse_button.clicked.connect(self._collapse_all)
 
-        fullscreen_button = QPushButton(
-            "Fullscreen"
-        )
+        fullscreen_button = QPushButton("Fullscreen")
 
-        fullscreen_button.clicked.connect(
-            self._toggle_fullscreen
-        )
+        fullscreen_button.clicked.connect(self._toggle_fullscreen)
 
         # QWebEngineView depends on Chromium's GPU/compositor stack,
         # which can fail to initialize on some machines (VMs, locked-
@@ -121,109 +95,65 @@ class AdvancedGraphView(QWidget):
         # the exact same graph HTML to a temp file and opens it in the
         # system's default browser, which doesn't depend on
         # QtWebEngine at all.
-        open_browser_button = QPushButton(
-            "Open in Browser"
-        )
+        open_browser_button = QPushButton("Open in Browser")
 
-        open_browser_button.clicked.connect(
-            self._open_graph_in_browser
-        )
+        open_browser_button.clicked.connect(self._open_graph_in_browser)
 
-        self._labels_checkbox = QCheckBox(
-            "Labels"
-        )
+        self._labels_checkbox = QCheckBox("Labels")
 
-        self._labels_checkbox.setChecked(
-            True
-        )
+        self._labels_checkbox.setChecked(True)
 
-        self._labels_checkbox.toggled.connect(
-            self._toggle_labels
-        )
+        self._labels_checkbox.toggled.connect(self._toggle_labels)
 
         toolbar.addWidget(
             self._search,
             1,
         )
 
-        toolbar.addWidget(
-            search_button
-        )
+        toolbar.addWidget(search_button)
 
-        toolbar.addWidget(
-            reset_button
-        )
+        toolbar.addWidget(reset_button)
 
-        toolbar.addWidget(
-            fit_button
-        )
+        toolbar.addWidget(fit_button)
 
-        toolbar.addWidget(
-            expand_button
-        )
+        toolbar.addWidget(expand_button)
 
-        toolbar.addWidget(
-            collapse_button
-        )
+        toolbar.addWidget(collapse_button)
 
-        toolbar.addWidget(
-            self._labels_checkbox
-        )
+        toolbar.addWidget(self._labels_checkbox)
 
-        toolbar.addWidget(
-            fullscreen_button
-        )
+        toolbar.addWidget(fullscreen_button)
 
-        toolbar.addWidget(
-            open_browser_button
-        )
+        toolbar.addWidget(open_browser_button)
 
-        layout.addLayout(
-            toolbar
-        )
+        layout.addLayout(toolbar)
 
         depth_layout = QHBoxLayout()
 
-        depth_layout.addWidget(
-            QLabel("Depth:")
-        )
+        depth_layout.addWidget(QLabel("Depth:"))
 
-        self._depth_slider = QSlider(
-            Qt.Orientation.Horizontal
-        )
+        self._depth_slider = QSlider(Qt.Orientation.Horizontal)
 
         self._depth_slider.setMinimum(1)
         self._depth_slider.setMaximum(10)
         self._depth_slider.setValue(10)
 
-        self._depth_value = QLabel(
-            "10"
-        )
+        self._depth_value = QLabel("10")
 
-        self._depth_slider.valueChanged.connect(
-            self._depth_changed
-        )
+        self._depth_slider.valueChanged.connect(self._depth_changed)
 
         depth_layout.addWidget(
             self._depth_slider,
             1,
         )
 
-        depth_layout.addWidget(
-            self._depth_value
-        )
+        depth_layout.addWidget(self._depth_value)
 
-        layout.addLayout(
-            depth_layout
-        )
+        layout.addLayout(depth_layout)
 
-        self._stats = QLabel(
-            "Load JSON to display graph."
-        )
+        self._stats = QLabel("Load JSON to display graph.")
 
-        layout.addWidget(
-            self._stats
-        )
+        layout.addWidget(self._stats)
 
         self._web_view = QWebEngineView()
 
@@ -232,9 +162,7 @@ class AdvancedGraphView(QWidget):
             1,
         )
 
-        self._search.returnPressed.connect(
-            self._search_graph
-        )
+        self._search.returnPressed.connect(self._search_graph)
 
     def set_payload(
         self,
@@ -244,45 +172,32 @@ class AdvancedGraphView(QWidget):
 
         self._payload = payload
 
-        self._graph_data = (
-            self._service.build(
-                payload
-            )
-        )
+        self._graph_data = self._service.build(payload)
 
-        stats = (
-            self._graph_data.statistics
-        )
+        stats = self._graph_data.statistics
 
         maximum_depth = max(
             stats.max_depth,
             1,
         )
 
-        self._depth_slider.setMaximum(
-            maximum_depth
-        )
+        self._depth_slider.setMaximum(maximum_depth)
 
-        self._depth_slider.setValue(
-            maximum_depth
-        )
+        self._depth_slider.setValue(maximum_depth)
 
         truncated_text = (
-            " | Limited to first "
-            f"{self._service.node_limit:,} nodes"
+            f" | Limited to first {self._service.node_limit:,} nodes"
             if self._graph_data.truncated
             else ""
         )
 
         self._stats.setText(
-            (
-                f"Nodes: {stats.total_nodes:,} | "
-                f"Objects: {stats.object_nodes:,} | "
-                f"Arrays: {stats.array_nodes:,} | "
-                f"Values: {stats.primitive_nodes:,} | "
-                f"Depth: {stats.max_depth}"
-                f"{truncated_text}"
-            )
+            f"Nodes: {stats.total_nodes:,} | "
+            f"Objects: {stats.object_nodes:,} | "
+            f"Arrays: {stats.array_nodes:,} | "
+            f"Values: {stats.primitive_nodes:,} | "
+            f"Depth: {stats.max_depth}"
+            f"{truncated_text}"
         )
 
         self._render_graph()
@@ -296,9 +211,7 @@ class AdvancedGraphView(QWidget):
 
         self._web_view.setHtml("")
 
-        self._stats.setText(
-            "Load JSON to display graph."
-        )
+        self._stats.setText("Load JSON to display graph.")
 
     def _open_graph_in_browser(self) -> None:
         """Open the current graph in the system's default browser.
@@ -335,14 +248,9 @@ class AdvancedGraphView(QWidget):
         if self._graph_data is None:
             return
 
-        d3_path = (
-            files("jsonify.resources")
-            .joinpath("d3.min.js")
-        )
+        d3_path = files("jsonify.resources").joinpath("d3.min.js")
 
-        d3_source = d3_path.read_text(
-            encoding="utf-8"
-        )
+        d3_source = d3_path.read_text(encoding="utf-8")
 
         nodes = [
             {
@@ -382,9 +290,7 @@ class AdvancedGraphView(QWidget):
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(html)
 
-        self._web_view.setUrl(
-            QUrl.fromLocalFile(path)
-        )
+        self._web_view.setUrl(QUrl.fromLocalFile(path))
 
     @staticmethod
     def _build_html(
@@ -555,58 +461,40 @@ window.addEventListener('resize',()=>focusRoot());
     ) -> None:
         """Execute JavaScript in graph."""
 
-        self._web_view.page().runJavaScript(
-            script
-        )
+        self._web_view.page().runJavaScript(script)
 
     def _search_graph(self) -> None:
         """Highlight matching graph nodes."""
 
-        query = json.dumps(
-            self._search.text()
-        )
+        query = json.dumps(self._search.text())
 
-        self._run_js(
-            f"searchGraph({query});"
-        )
+        self._run_js(f"searchGraph({query});")
 
     def _reset_graph(self) -> None:
         """Reset graph state."""
 
         self._search.clear()
 
-        self._depth_slider.setValue(
-            self._depth_slider.maximum()
-        )
+        self._depth_slider.setValue(self._depth_slider.maximum())
 
-        self._labels_checkbox.setChecked(
-            True
-        )
+        self._labels_checkbox.setChecked(True)
 
-        self._run_js(
-            "resetGraph();"
-        )
+        self._run_js("resetGraph();")
 
     def _fit_graph(self) -> None:
         """Fit graph to viewport."""
 
-        self._run_js(
-            "fitGraph();"
-        )
+        self._run_js("fitGraph();")
 
     def _expand_all(self) -> None:
         """Expand graph nodes."""
 
-        self._run_js(
-            "expandAll();"
-        )
+        self._run_js("expandAll();")
 
     def _collapse_all(self) -> None:
         """Collapse graph nodes."""
 
-        self._run_js(
-            "collapseAll();"
-        )
+        self._run_js("collapseAll();")
 
     def _depth_changed(
         self,
@@ -614,13 +502,9 @@ window.addEventListener('resize',()=>focusRoot());
     ) -> None:
         """Change visible graph depth."""
 
-        self._depth_value.setText(
-            str(depth)
-        )
+        self._depth_value.setText(str(depth))
 
-        self._run_js(
-            f"setDepth({depth});"
-        )
+        self._run_js(f"setDepth({depth});")
 
     def _toggle_labels(
         self,
@@ -628,15 +512,9 @@ window.addEventListener('resize',()=>focusRoot());
     ) -> None:
         """Show or hide graph labels."""
 
-        javascript_value = (
-            "true"
-            if visible
-            else "false"
-        )
+        javascript_value = "true" if visible else "false"
 
-        self._run_js(
-            f"setLabels({javascript_value});"
-        )
+        self._run_js(f"setLabels({javascript_value});")
 
     def export_graph(
         self,
@@ -700,9 +578,7 @@ window.addEventListener('resize',()=>focusRoot());
                         painter.end()
 
                 if not os.path.isfile(path):
-                    raise RuntimeError(
-                        f"Graph export did not create the file: {path}"
-                    )
+                    raise RuntimeError(f"Graph export did not create the file: {path}")
 
                 if on_success is not None:
                     on_success(path)

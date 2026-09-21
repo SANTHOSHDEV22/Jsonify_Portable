@@ -29,9 +29,7 @@ def test_full_mask() -> None:
 
     assert result["username"] == "alice"
 
-    assert result["password"] == (
-        "*" * len("secret123")
-    )
+    assert result["password"] == ("*" * len("secret123"))
 
 
 def test_original_payload_is_not_modified() -> None:
@@ -64,22 +62,12 @@ def test_nested_field_masking() -> None:
 
     result = mask_json(
         payload,
-        [
-            MaskingRule(
-                "password"
-            )
-        ],
+        [MaskingRule("password")],
     )
 
-    assert (
-        result["user"]["name"]
-        == "Alice"
-    )
+    assert result["user"]["name"] == "Alice"
 
-    assert (
-        result["user"]["password"]
-        != "secret"
-    )
+    assert result["user"]["password"] != "secret"
 
 
 def test_repeated_fields_are_all_masked() -> None:
@@ -98,22 +86,12 @@ def test_repeated_fields_are_all_masked() -> None:
 
     result = mask_json(
         payload,
-        [
-            MaskingRule(
-                "token"
-            )
-        ],
+        [MaskingRule("token")],
     )
 
-    assert (
-        result["users"][0]["token"]
-        != "token-one"
-    )
+    assert result["users"][0]["token"] != "token-one"
 
-    assert (
-        result["users"][1]["token"]
-        != "token-two"
-    )
+    assert result["users"][1]["token"] != "token-two"
 
 
 def test_case_insensitive_field_matching() -> None:
@@ -123,11 +101,7 @@ def test_case_insensitive_field_matching() -> None:
 
     result = mask_json(
         payload,
-        [
-            MaskingRule(
-                "password"
-            )
-        ],
+        [MaskingRule("password")],
     )
 
     assert result["Password"] != "secret"
@@ -148,10 +122,7 @@ def test_email_masking() -> None:
         ],
     )
 
-    assert (
-        result["email"]
-        == "j*******@example.com"
-    )
+    assert result["email"] == "j*******@example.com"
 
 
 def test_partial_mask() -> None:
@@ -169,10 +140,7 @@ def test_partial_mask() -> None:
         ],
     )
 
-    assert (
-        result["customerId"]
-        == "12******90"
-    )
+    assert result["customerId"] == "12******90"
 
 
 def test_detect_sensitive_fields() -> None:
@@ -184,9 +152,7 @@ def test_detect_sensitive_fields() -> None:
         },
     }
 
-    result = detect_sensitive_fields(
-        payload
-    )
+    result = detect_sensitive_fields(payload)
 
     assert "password" in result
     assert "token" in result
@@ -202,9 +168,7 @@ def test_extract_field_names() -> None:
         },
     }
 
-    result = extract_field_names(
-        payload
-    )
+    result = extract_field_names(payload)
 
     assert result == [
         "email",
@@ -221,11 +185,7 @@ def test_null_value_remains_null() -> None:
 
     result = mask_json(
         payload,
-        [
-            MaskingRule(
-                "token"
-            )
-        ],
+        [MaskingRule("token")],
     )
 
     assert result["token"] is None

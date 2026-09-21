@@ -36,11 +36,7 @@ class LargeJsonService:
         self,
         settings: LargeJsonSettings | None = None,
     ) -> None:
-        self.settings = (
-            settings
-            if settings is not None
-            else LargeJsonSettings()
-        )
+        self.settings = settings if settings is not None else LargeJsonSettings()
 
     def analyze(
         self,
@@ -56,10 +52,7 @@ class LargeJsonService:
     ) -> bool:
         """Return whether lazy tree rendering is recommended."""
 
-        return (
-            info.total_nodes
-            >= self.settings.lazy_threshold
-        )
+        return info.total_nodes >= self.settings.lazy_threshold
 
     def preview(
         self,
@@ -77,20 +70,13 @@ class LargeJsonService:
             return "null"
 
         if isinstance(value, bool):
-            return (
-                "true"
-                if value
-                else "false"
-            )
+            return "true" if value else "false"
 
         text = str(value)
 
         limit = self.settings.preview_length
 
         if len(text) > limit:
-            return (
-                text[:limit]
-                + "..."
-            )
+            return text[:limit] + "..."
 
         return text

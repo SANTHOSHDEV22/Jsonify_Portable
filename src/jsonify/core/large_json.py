@@ -33,9 +33,7 @@ def analyze_json(
     primitives = 0
     max_depth = 0
 
-    stack: list[tuple[JSONValue, int]] = [
-        (payload, 0)
-    ]
+    stack: list[tuple[JSONValue, int]] = [(payload, 0)]
 
     while stack:
         value, depth = stack.pop()

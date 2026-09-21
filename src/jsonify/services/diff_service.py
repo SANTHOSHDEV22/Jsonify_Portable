@@ -14,18 +14,23 @@ class DiffService:
         self,
         old: JSONValue,
         new: JSONValue,
+        *,
+        array_identity_key: str | None = None,
     ) -> list[JsonDiff]:
         """Compare two already parsed JSON values."""
 
         return compare_json(
             old=old,
             new=new,
+            array_identity_key=array_identity_key,
         )
 
     def compare_text(
         self,
         old_text: str,
         new_text: str,
+        *,
+        array_identity_key: str | None = None,
     ) -> list[JsonDiff]:
         """Parse and compare two JSON documents."""
 
@@ -35,4 +40,5 @@ class DiffService:
         return compare_json(
             old=old_payload,
             new=new_payload,
+            array_identity_key=array_identity_key,
         )

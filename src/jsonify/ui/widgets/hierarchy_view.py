@@ -6,6 +6,7 @@ import json
 
 from jsonify.core.models import JSONValue
 
+
 def build_hierarchy_text(
     data: JSONValue,
 ) -> str:

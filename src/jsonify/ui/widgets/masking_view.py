@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from jsonify.core.models import JSONValue
+from jsonify.core.sensitive import SensitiveFinding, detect_sensitive_data, mask_paths
 from jsonify.services.masking_service import (
     MaskingService,
 )
@@ -32,6 +33,9 @@ from jsonify.ui.constants import MONOSPACE_FONT
 class MaskingView(QWidget):
     """Widget for masking sensitive fields in JSON."""
 
+    masked_payload_changed = Signal(object)
+    """Emitted with the latest masked payload (or ``None`` when cleared)."""
+
     def __init__(
         self,
         masking_service: MaskingService | None = None,
@@ -39,14 +43,11 @@ class MaskingView(QWidget):
     ) -> None:
         super().__init__(parent)
 
-        self._masking_service = (
-            masking_service
-            if masking_service is not None
-            else MaskingService()
-        )
+        self._masking_service = masking_service if masking_service is not None else MaskingService()
 
         self._payload: JSONValue | None = None
         self._masked_payload: JSONValue | None = None
+        self._findings: list[SensitiveFinding] = []
 
         self._setup_ui()
 
@@ -55,9 +56,7 @@ class MaskingView(QWidget):
 
         layout = QVBoxLayout(self)
 
-        title = QLabel(
-            "Sensitive-data Masking"
-        )
+        title = QLabel("Sensitive-data Masking")
 
         title_font = title.font()
         title_font.setBold(True)
@@ -77,25 +76,15 @@ class MaskingView(QWidget):
 
         layout.addWidget(description)
 
-        splitter = QSplitter(
-            Qt.Orientation.Horizontal
-        )
+        splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        controls_panel = (
-            self._create_controls_panel()
-        )
+        controls_panel = self._create_controls_panel()
 
-        preview_panel = (
-            self._create_preview_panel()
-        )
+        preview_panel = self._create_preview_panel()
 
-        splitter.addWidget(
-            controls_panel
-        )
+        splitter.addWidget(controls_panel)
 
-        splitter.addWidget(
-            preview_panel
-        )
+        splitter.addWidget(preview_panel)
 
         splitter.setStretchFactor(
             0,
@@ -107,9 +96,7 @@ class MaskingView(QWidget):
             1,
         )
 
-        splitter.setSizes(
-            [320, 800]
-        )
+        splitter.setSizes([320, 800])
 
         layout.addWidget(
             splitter,
@@ -118,79 +105,56 @@ class MaskingView(QWidget):
 
         button_layout = QHBoxLayout()
 
-        self._mask_button = QPushButton(
-            "Mask Selected Fields"
-        )
+        self._mask_button = QPushButton("Mask Selected Fields")
 
-        self._mask_button.clicked.connect(
-            self._mask_selected
-        )
+        self._mask_button.clicked.connect(self._mask_selected)
 
-        detect_button = QPushButton(
-            "Detect Sensitive Fields"
-        )
+        detect_button = QPushButton("Detect Sensitive Fields")
 
-        detect_button.clicked.connect(
-            self._detect_sensitive
-        )
+        detect_button.clicked.connect(self._detect_sensitive)
 
-        select_all_button = QPushButton(
-            "Select All"
-        )
+        select_all_button = QPushButton("Select All")
 
-        select_all_button.clicked.connect(
-            self._select_all
-        )
+        select_all_button.clicked.connect(self._select_all)
 
-        clear_selection_button = QPushButton(
-            "Clear Selection"
-        )
+        clear_selection_button = QPushButton("Clear Selection")
 
-        clear_selection_button.clicked.connect(
-            self._clear_selection
-        )
+        clear_selection_button.clicked.connect(self._clear_selection)
 
-        copy_button = QPushButton(
-            "Copy Masked JSON"
+        scan_button = QPushButton("Scan Values")
+        scan_button.setToolTip(
+            "Detect emails, phones, JWTs, API keys and connection strings by value"
         )
+        scan_button.clicked.connect(self._scan_values)
 
-        copy_button.clicked.connect(
-            self._copy_masked_json
-        )
+        auto_mask_button = QPushButton("Auto-Mask Detected")
+        auto_mask_button.clicked.connect(self._auto_mask)
 
-        button_layout.addWidget(
-            self._mask_button
-        )
+        copy_button = QPushButton("Copy Masked JSON")
 
-        button_layout.addWidget(
-            detect_button
-        )
+        copy_button.clicked.connect(self._copy_masked_json)
 
-        button_layout.addWidget(
-            select_all_button
-        )
+        button_layout.addWidget(self._mask_button)
 
-        button_layout.addWidget(
-            clear_selection_button
-        )
+        button_layout.addWidget(detect_button)
+
+        button_layout.addWidget(scan_button)
+
+        button_layout.addWidget(auto_mask_button)
+
+        button_layout.addWidget(select_all_button)
+
+        button_layout.addWidget(clear_selection_button)
 
         button_layout.addStretch()
 
-        button_layout.addWidget(
-            copy_button
-        )
+        button_layout.addWidget(copy_button)
 
-        layout.addLayout(
-            button_layout
-        )
+        layout.addLayout(button_layout)
 
-        self._status_label = QLabel(
-            "Load a JSON payload to begin."
-        )
+        self._status_label = QLabel("Load a JSON payload to begin.")
 
-        layout.addWidget(
-            self._status_label
-        )
+        layout.addWidget(self._status_label)
 
     def _create_controls_panel(
         self,
@@ -201,30 +165,20 @@ class MaskingView(QWidget):
 
         layout = QVBoxLayout(panel)
 
-        fields_label = QLabel(
-            "Fields"
-        )
+        fields_label = QLabel("Fields")
 
         fields_font = fields_label.font()
         fields_font.setBold(True)
 
-        fields_label.setFont(
-            fields_font
-        )
+        fields_label.setFont(fields_font)
 
-        layout.addWidget(
-            fields_label
-        )
+        layout.addWidget(fields_label)
 
-        help_label = QLabel(
-            "Check the fields that should be masked."
-        )
+        help_label = QLabel("Check the fields that should be masked.")
 
         help_label.setWordWrap(True)
 
-        layout.addWidget(
-            help_label
-        )
+        layout.addWidget(help_label)
 
         self._field_list = QListWidget()
 
@@ -233,20 +187,14 @@ class MaskingView(QWidget):
             1,
         )
 
-        mode_label = QLabel(
-            "Default Masking Mode"
-        )
+        mode_label = QLabel("Default Masking Mode")
 
         mode_font = mode_label.font()
         mode_font.setBold(True)
 
-        mode_label.setFont(
-            mode_font
-        )
+        mode_label.setFont(mode_font)
 
-        layout.addWidget(
-            mode_label
-        )
+        layout.addWidget(mode_label)
 
         self._mask_mode = QComboBox()
 
@@ -260,21 +208,13 @@ class MaskingView(QWidget):
             "partial",
         )
 
-        layout.addWidget(
-            self._mask_mode
-        )
+        layout.addWidget(self._mask_mode)
 
-        self._auto_email = QCheckBox(
-            "Use email masking for fields named email"
-        )
+        self._auto_email = QCheckBox("Use email masking for fields named email")
 
-        self._auto_email.setChecked(
-            True
-        )
+        self._auto_email.setChecked(True)
 
-        layout.addWidget(
-            self._auto_email
-        )
+        layout.addWidget(self._auto_email)
 
         return panel
 
@@ -287,105 +227,59 @@ class MaskingView(QWidget):
 
         layout = QVBoxLayout(panel)
 
-        preview_splitter = QSplitter(
-            Qt.Orientation.Horizontal
-        )
+        preview_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         original_panel = QWidget()
 
-        original_layout = QVBoxLayout(
-            original_panel
-        )
+        original_layout = QVBoxLayout(original_panel)
 
-        original_label = QLabel(
-            "Original JSON"
-        )
+        original_label = QLabel("Original JSON")
 
-        original_font = (
-            original_label.font()
-        )
+        original_font = original_label.font()
 
         original_font.setBold(True)
 
-        original_label.setFont(
-            original_font
-        )
+        original_label.setFont(original_font)
 
-        self._original_editor = (
-            QPlainTextEdit()
-        )
+        self._original_editor = QPlainTextEdit()
 
-        self._original_editor.setReadOnly(
-            True
-        )
+        self._original_editor.setReadOnly(True)
 
-        self._original_editor.setLineWrapMode(
-            QPlainTextEdit.LineWrapMode.NoWrap
-        )
+        self._original_editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
-        self._original_editor.setFont(
-            QFont(MONOSPACE_FONT)
-        )
+        self._original_editor.setFont(QFont(MONOSPACE_FONT))
 
-        original_layout.addWidget(
-            original_label
-        )
+        original_layout.addWidget(original_label)
 
-        original_layout.addWidget(
-            self._original_editor
-        )
+        original_layout.addWidget(self._original_editor)
 
         masked_panel = QWidget()
 
-        masked_layout = QVBoxLayout(
-            masked_panel
-        )
+        masked_layout = QVBoxLayout(masked_panel)
 
-        masked_label = QLabel(
-            "Masked JSON"
-        )
+        masked_label = QLabel("Masked JSON")
 
-        masked_font = (
-            masked_label.font()
-        )
+        masked_font = masked_label.font()
 
         masked_font.setBold(True)
 
-        masked_label.setFont(
-            masked_font
-        )
+        masked_label.setFont(masked_font)
 
-        self._masked_editor = (
-            QPlainTextEdit()
-        )
+        self._masked_editor = QPlainTextEdit()
 
-        self._masked_editor.setReadOnly(
-            True
-        )
+        self._masked_editor.setReadOnly(True)
 
-        self._masked_editor.setLineWrapMode(
-            QPlainTextEdit.LineWrapMode.NoWrap
-        )
+        self._masked_editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
-        self._masked_editor.setFont(
-            QFont(MONOSPACE_FONT)
-        )
+        self._masked_editor.setFont(QFont(MONOSPACE_FONT))
 
-        masked_layout.addWidget(
-            masked_label
-        )
+        masked_layout.addWidget(masked_label)
 
-        masked_layout.addWidget(
-            self._masked_editor
-        )
+        masked_layout.addWidget(self._masked_editor)
 
-        preview_splitter.addWidget(
-            original_panel
-        )
+        preview_splitter.addWidget(original_panel)
 
-        preview_splitter.addWidget(
-            masked_panel
-        )
+        preview_splitter.addWidget(masked_panel)
 
         preview_splitter.setStretchFactor(
             0,
@@ -397,9 +291,7 @@ class MaskingView(QWidget):
             1,
         )
 
-        layout.addWidget(
-            preview_splitter
-        )
+        layout.addWidget(preview_splitter)
 
         return panel
 
@@ -411,20 +303,16 @@ class MaskingView(QWidget):
 
         self._payload = payload
         self._masked_payload = None
+        self._findings = []
+        self.masked_payload_changed.emit(None)
 
-        self._original_editor.setPlainText(
-            self._pretty_json(
-                payload
-            )
-        )
+        self._original_editor.setPlainText(self._pretty_json(payload))
 
         self._masked_editor.clear()
 
         self._populate_fields()
 
-        self._status_label.setText(
-            "JSON loaded. Select fields to mask."
-        )
+        self._status_label.setText("JSON loaded. Select fields to mask.")
 
     def clear_payload(self) -> None:
         """Remove the currently loaded payload."""
@@ -437,9 +325,7 @@ class MaskingView(QWidget):
 
         self._field_list.clear()
 
-        self._status_label.setText(
-            "Load a JSON payload to begin."
-        )
+        self._status_label.setText("Load a JSON payload to begin.")
 
     def _populate_fields(self) -> None:
         """Populate all available JSON field names."""
@@ -449,28 +335,16 @@ class MaskingView(QWidget):
         if self._payload is None:
             return
 
-        fields = (
-            self._masking_service
-            .get_fields(self._payload)
-        )
+        fields = self._masking_service.get_fields(self._payload)
 
         for field in fields:
-            item = QListWidgetItem(
-                field
-            )
+            item = QListWidgetItem(field)
 
-            item.setFlags(
-                item.flags()
-                | Qt.ItemFlag.ItemIsUserCheckable
-            )
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
 
-            item.setCheckState(
-                Qt.CheckState.Unchecked
-            )
+            item.setCheckState(Qt.CheckState.Unchecked)
 
-            self._field_list.addItem(
-                item
-            )
+            self._field_list.addItem(item)
 
     def _detect_sensitive(self) -> None:
         """Automatically select likely sensitive fields."""
@@ -479,49 +353,31 @@ class MaskingView(QWidget):
             QMessageBox.warning(
                 self,
                 "No JSON Loaded",
-                "Load JSON before detecting "
-                "sensitive fields.",
+                "Load JSON before detecting sensitive fields.",
             )
             return
 
         detected = {
-            field.casefold()
-            for field
-            in self._masking_service.detect_fields(
-                self._payload
-            )
+            field.casefold() for field in self._masking_service.detect_fields(self._payload)
         }
 
         count = 0
 
-        for index in range(
-            self._field_list.count()
-        ):
-            item = (
-                self._field_list.item(
-                    index
-                )
-            )
+        for index in range(self._field_list.count()):
+            item = self._field_list.item(index)
 
-            if (
-                item.text().casefold()
-                in detected
-            ):
-                item.setCheckState(
-                    Qt.CheckState.Checked
-                )
+            if item.text().casefold() in detected:
+                item.setCheckState(Qt.CheckState.Checked)
 
                 count += 1
 
         if count == 0:
             self._status_label.setText(
-                "No known sensitive field names detected. "
-                "Select fields manually if needed."
+                "No known sensitive field names detected. Select fields manually if needed."
             )
         else:
             self._status_label.setText(
-                f"{count} likely sensitive field(s) selected. "
-                "Review them before masking."
+                f"{count} likely sensitive field(s) selected. Review them before masking."
             )
 
     def _mask_selected(self) -> None:
@@ -535,9 +391,7 @@ class MaskingView(QWidget):
             )
             return
 
-        selected_fields = (
-            self._selected_fields()
-        )
+        selected_fields = self._selected_fields()
 
         if not selected_fields:
             QMessageBox.warning(
@@ -562,33 +416,21 @@ class MaskingView(QWidget):
                 }
             }
 
-        if (
-            self._mask_mode.currentData()
-            == "partial"
-        ):
-            partial_fields = (
-                set(selected_fields)
-                - email_fields
-            )
+        if self._mask_mode.currentData() == "partial":
+            partial_fields = set(selected_fields) - email_fields
 
-        self._masked_payload = (
-            self._masking_service.mask(
-                payload=self._payload,
-                fields=selected_fields,
-                email_fields=email_fields,
-                partial_fields=partial_fields,
-            )
+        self._masked_payload = self._masking_service.mask(
+            payload=self._payload,
+            fields=selected_fields,
+            email_fields=email_fields,
+            partial_fields=partial_fields,
         )
 
-        self._masked_editor.setPlainText(
-            self._pretty_json(
-                self._masked_payload
-            )
-        )
+        self._masked_editor.setPlainText(self._pretty_json(self._masked_payload))
+        self.masked_payload_changed.emit(self._masked_payload)
 
         self._status_label.setText(
-            f"{len(selected_fields)} field(s) masked. "
-            "Original JSON remains unchanged."
+            f"{len(selected_fields)} field(s) masked. Original JSON remains unchanged."
         )
 
     def _selected_fields(
@@ -598,48 +440,67 @@ class MaskingView(QWidget):
 
         selected: list[str] = []
 
-        for index in range(
-            self._field_list.count()
-        ):
-            item = (
-                self._field_list.item(
-                    index
-                )
-            )
+        for index in range(self._field_list.count()):
+            item = self._field_list.item(index)
 
-            if (
-                item.checkState()
-                == Qt.CheckState.Checked
-            ):
-                selected.append(
-                    item.text()
-                )
+            if item.checkState() == Qt.CheckState.Checked:
+                selected.append(item.text())
 
         return selected
 
     def _select_all(self) -> None:
         """Select all available fields."""
 
-        for index in range(
-            self._field_list.count()
-        ):
-            self._field_list.item(
-                index
-            ).setCheckState(
-                Qt.CheckState.Checked
-            )
+        for index in range(self._field_list.count()):
+            self._field_list.item(index).setCheckState(Qt.CheckState.Checked)
 
     def _clear_selection(self) -> None:
         """Clear all field selections."""
 
-        for index in range(
-            self._field_list.count()
-        ):
-            self._field_list.item(
-                index
-            ).setCheckState(
-                Qt.CheckState.Unchecked
-            )
+        for index in range(self._field_list.count()):
+            self._field_list.item(index).setCheckState(Qt.CheckState.Unchecked)
+
+    def _scan_values(self) -> None:
+        """Detect sensitive data by value pattern and key name."""
+
+        if self._payload is None:
+            QMessageBox.warning(self, "No JSON Loaded", "Load JSON before scanning.")
+            return
+
+        self._findings = detect_sensitive_data(self._payload)
+
+        if not self._findings:
+            self._status_label.setText("No sensitive values detected.")
+            return
+
+        counts: dict[str, int] = {}
+        for finding in self._findings:
+            counts[finding.category] = counts.get(finding.category, 0) + 1
+
+        summary = ", ".join(f"{count} {name}" for name, count in sorted(counts.items()))
+        listing = "\n".join(f"{f.path}   [{f.category}, {f.reason}]" for f in self._findings[:200])
+        self._masked_editor.setPlainText(
+            f"Detected {len(self._findings)} value(s): {summary}\n\n{listing}"
+        )
+        self._status_label.setText(
+            f"Detected {len(self._findings)} sensitive value(s): {summary}. "
+            "Use Auto-Mask Detected to mask them."
+        )
+
+    def _auto_mask(self) -> None:
+        """Mask every detected value by path."""
+
+        if self._payload is None:
+            QMessageBox.warning(self, "No JSON Loaded", "Load JSON before masking.")
+            return
+
+        self._findings = detect_sensitive_data(self._payload)
+        self._masked_payload = mask_paths(self._payload, self._findings)
+        self._masked_editor.setPlainText(self._pretty_json(self._masked_payload))
+        self.masked_payload_changed.emit(self._masked_payload)
+        self._status_label.setText(
+            f"{len(self._findings)} detected value(s) masked. Original JSON remains unchanged."
+        )
 
     def _copy_masked_json(self) -> None:
         """Copy masked JSON to the system clipboard."""
@@ -652,19 +513,11 @@ class MaskingView(QWidget):
             )
             return
 
-        clipboard = (
-            QApplication.clipboard()
-        )
+        clipboard = QApplication.clipboard()
 
-        clipboard.setText(
-            self._pretty_json(
-                self._masked_payload
-            )
-        )
+        clipboard.setText(self._pretty_json(self._masked_payload))
 
-        self._status_label.setText(
-            "Masked JSON copied to clipboard."
-        )
+        self._status_label.setText("Masked JSON copied to clipboard.")
 
     @staticmethod
     def _pretty_json(

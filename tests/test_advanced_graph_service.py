@@ -17,20 +17,11 @@ def test_simple_object() -> None:
         }
     )
 
-    assert (
-        result.statistics.total_nodes
-        == 3
-    )
+    assert result.statistics.total_nodes == 3
 
-    assert (
-        result.statistics.object_nodes
-        == 1
-    )
+    assert result.statistics.object_nodes == 1
 
-    assert (
-        result.statistics.primitive_nodes
-        == 2
-    )
+    assert result.statistics.primitive_nodes == 2
 
 
 def test_root_node() -> None:
@@ -61,10 +52,7 @@ def test_nested_paths() -> None:
         }
     )
 
-    paths = {
-        node.path
-        for node in result.nodes
-    }
+    paths = {node.path for node in result.nodes}
 
     assert "$" in paths
     assert "$.user" in paths
@@ -84,10 +72,7 @@ def test_array_paths() -> None:
         }
     )
 
-    paths = {
-        node.path
-        for node in result.nodes
-    }
+    paths = {node.path for node in result.nodes}
 
     assert "$.users" in paths
     assert "$.users[0]" in paths
@@ -109,10 +94,7 @@ def test_json_types() -> None:
         }
     )
 
-    types = {
-        node.name: node.node_type
-        for node in result.nodes
-    }
+    types = {node.name: node.node_type for node in result.nodes}
 
     assert types["string"] == "string"
     assert types["integer"] == "integer"
@@ -124,26 +106,18 @@ def test_json_types() -> None:
 
 
 def test_graph_limit() -> None:
-    service = AdvancedGraphService(
-        node_limit=10
-    )
+    service = AdvancedGraphService(node_limit=10)
 
-    payload = list(
-        range(100)
-    )
+    payload = list(range(100))
 
-    result = service.build(
-        payload
-    )
+    result = service.build(payload)
 
     assert len(result.nodes) == 10
     assert result.truncated is True
 
 
 def test_graph_not_truncated() -> None:
-    service = AdvancedGraphService(
-        node_limit=100
-    )
+    service = AdvancedGraphService(node_limit=100)
 
     result = service.build(
         {
@@ -168,10 +142,7 @@ def test_max_depth() -> None:
         }
     )
 
-    assert (
-        result.statistics.max_depth
-        == 3
-    )
+    assert result.statistics.max_depth == 3
 
 
 def test_special_key_path() -> None:
@@ -183,21 +154,13 @@ def test_special_key_path() -> None:
         }
     )
 
-    paths = {
-        node.path
-        for node in result.nodes
-    }
+    paths = {node.path for node in result.nodes}
 
-    assert (
-        '$["first name"]'
-        in paths
-    )
+    assert '$["first name"]' in paths
 
 
 def test_long_value_preview() -> None:
-    service = AdvancedGraphService(
-        preview_length=5
-    )
+    service = AdvancedGraphService(preview_length=5)
 
     result = service.build(
         {
@@ -205,13 +168,6 @@ def test_long_value_preview() -> None:
         }
     )
 
-    value_node = next(
-        node
-        for node in result.nodes
-        if node.name == "value"
-    )
+    value_node = next(node for node in result.nodes if node.name == "value")
 
-    assert (
-        value_node.value
-        == "abcde..."
-    )
+    assert value_node.value == "abcde..."

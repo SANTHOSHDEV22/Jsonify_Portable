@@ -1,1 +1,0 @@
-"""Jsonify License Server package."""

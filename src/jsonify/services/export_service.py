@@ -45,9 +45,7 @@ class ExportService:
             )
 
         except (OSError, TypeError, ValueError) as error:
-            raise ExportError(
-                f"Unable to export JSON: {error}"
-            ) from error
+            raise ExportError(f"Unable to export JSON: {error}") from error
 
         return path
 
@@ -80,9 +78,7 @@ class ExportService:
             )
 
         except OSError as error:
-            raise ExportError(
-                f"Unable to export file: {error}"
-            ) from error
+            raise ExportError(f"Unable to export file: {error}") from error
 
         return path
 
@@ -96,8 +92,6 @@ class ExportService:
         path = Path(file_path)
 
         if path.suffix.lower() != extension.lower():
-            path = path.with_suffix(
-                extension
-            )
+            path = path.with_suffix(extension)
 
         return path

@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 
 from jsonify.core.models import JSONValue
+from jsonify.core.schema_inference import infer_schema
 
 
 class JsonSchemaError(ValueError):
@@ -64,9 +65,7 @@ class SchemaService:
         try:
             Draft202012Validator.check_schema(schema)
         except SchemaError as error:
-            raise JsonSchemaError(
-                f"Invalid JSON Schema: {error.message}"
-            ) from error
+            raise JsonSchemaError(f"Invalid JSON Schema: {error.message}") from error
 
         validator = Draft202012Validator(schema)
 
@@ -75,10 +74,7 @@ class SchemaService:
             key=lambda error: list(error.absolute_path),
         )
 
-        errors = tuple(
-            self._convert_error(error)
-            for error in raw_errors
-        )
+        errors = tuple(self._convert_error(error) for error in raw_errors)
 
         return SchemaValidationResult(
             valid=not errors,
@@ -107,14 +103,31 @@ class SchemaService:
         parsed_schema = json.loads(schema_text)
 
         if not isinstance(parsed_schema, dict):
-            raise JsonSchemaError(
-                "JSON Schema must be a JSON object."
-            )
+            raise JsonSchemaError("JSON Schema must be a JSON object.")
 
         return self.validate(
             payload=payload,
             schema=parsed_schema,
         )
+
+    def generate_schema(
+        self,
+        payload: JSONValue,
+        *,
+        title: str | None = None,
+    ) -> dict[str, Any]:
+        """Infer a JSON Schema (Draft 2020-12) from a sample payload."""
+
+        schema: dict[str, Any] = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+        }
+
+        if title:
+            schema["title"] = title
+
+        schema.update(infer_schema(payload))
+
+        return schema
 
     @staticmethod
     def _convert_error(
@@ -122,9 +135,7 @@ class SchemaService:
     ) -> SchemaValidationError:
         """Convert jsonschema's validation error to our model."""
 
-        path = SchemaService._format_path(
-            list(error.absolute_path)
-        )
+        path = SchemaService._format_path(list(error.absolute_path))
 
         return SchemaValidationError(
             path=path,
@@ -152,10 +163,7 @@ class SchemaService:
             if key.isidentifier():
                 path += f".{key}"
             else:
-                escaped = (
-                    key.replace("\\", "\\\\")
-                    .replace('"', '\\"')
-                )
+                escaped = key.replace("\\", "\\\\").replace('"', '\\"')
 
                 path += f'["{escaped}"]'
 

@@ -1,632 +1,380 @@
 # Jsonify
 
-Jsonify is a desktop application for viewing, exploring, filtering, and visualizing JSON payloads.
+A free, offline desktop toolkit for working with JSON — view it, edit it, query it, diff it, validate it, convert it, mask it, and call APIs that return it. Built with Python and PySide6, with a VS Code–style interface and eight built-in themes.
 
-The application is built with Python and PySide6 and provides multiple ways to inspect complex and deeply nested JSON data, including tree, hierarchy, filtered, and interactive graph views.
+Everything runs on your machine. The only network traffic is what you ask for (the API client, and the optional update check).
+
+- [Quick start](#quick-start)
+- [Running: dev vs. production](#running-dev-vs-production)
+- [Features](#features)
+- [Command-line interface](#command-line-interface)
+- [jq-lite reference](#jq-lite-reference)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Themes](#themes)
+- [Portable mode and data locations](#portable-mode-and-data-locations)
+- [Plugins](#plugins)
+- [Project structure](#project-structure)
+- [Development](#development)
+- [Building a release](#building-a-release)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Quick start
+
+You need **Python 3.11 or newer** ([python.org](https://www.python.org/downloads/)). Then:
+
+```powershell
+git clone https://github.com/santhoshkumard15092000/Jsonify.git
+cd Jsonify
+run_dev.cmd
+```
+
+`run_dev.cmd` creates a virtual environment in `.\venv`, installs everything, and starts the app. The first run takes a few minutes (PySide6 is large); later runs start immediately.
+
+On macOS / Linux use `./run_dev.sh` instead.
+
+To open a file straight away: `run_dev.cmd path\to\file.json`.
+
+---
+
+## Running: dev vs. production
+
+| | **Development** | **Production** |
+|---|---|---|
+| What runs | The Python source in `src/` (editable install) | The packaged app in `dist\Jsonify\` |
+| Needs Python | Yes | No (the build bundles it) |
+| Start it | `run_dev.cmd` | `run_prod.cmd` |
+| Build it | — | `build_prod.cmd` |
+| Best for | Changing code, running tests | Sharing with people, installers, portable use |
+
+### Development
+
+```powershell
+run_dev.cmd              # start the app
+run_dev.cmd file.json    # start the app and open a file
+run_dev.cmd test         # run the test suite  (extra pytest args are passed through)
+run_dev.cmd check        # ruff + formatting + mypy + tests  (what CI should run)
+run_dev.cmd cli format a.json   # use the command-line interface
+```
+
+Prefer to do it by hand?
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"      # or: pip install -r requirements-dev.txt
+python -m jsonify
+```
+
+### Production
+
+```powershell
+build_prod.cmd                 # -> dist\Jsonify\Jsonify.exe   (PyInstaller, one-folder)
+build_prod.cmd --portable      # also -> dist\Jsonify-<version>-portable.zip
+build_prod.cmd --installer     # also compiles installer\Jsonify.iss (needs Inno Setup 6)
+build_prod.cmd --clean         # wipe build\ and dist\ first
+run_prod.cmd                   # start the packaged app (builds it first if missing)
+```
+
+The build produces two executables in `dist\Jsonify\`:
+
+- `Jsonify.exe` — the desktop app
+- `jsonify-cli.exe` — the command-line interface (keeps a console window, unlike the app)
+
+Options combine: `build_prod.cmd --clean --portable --installer`. The logic lives in [`scripts/build.py`](scripts/build.py) if you want to run it directly (`python scripts/build.py --help`).
 
 ---
 
 ## Features
 
-### JSON Parsing
+The left rail of each document switches between tool groups. Every open file is its own tab, with its own set of tools.
 
-- Parse standard JSON documents.
-- Parse nested JSON objects and arrays.
-- Support multiple consecutive JSON documents.
-- Display useful validation errors for invalid JSON payloads.
+### View and edit — **JSON** group
 
-Example:
+| Feature | Notes |
+|---|---|
+| **Editor** | Line numbers, syntax highlighting, live validation with the error underlined on its line, bracket matching, auto-indent, undo/redo |
+| **Open / drop / paste** | Open dialog, drag & drop a file onto the editor, paste text, recent-files list |
+| **Tree view** | Lazy-loaded (handles very large files), expand/collapse, right-click → copy key / value / node / JSONPath / JSON Pointer, jump to parent or root |
+| **Type inspector** | Select a node to see its type, size, JSONPath and RFC 6901 pointer |
+| **Hierarchy view** | Indented outline with `{n}` / `[n]` counts |
+| **Filtered view** | Drill into the structure key by key |
+| **Graph view** | Interactive D3 graph — zoom, pan, fit, expand/collapse; export to SVG / PNG / PDF |
+| **Table view** | Arrays of objects as a sortable, filterable table |
+| **Search** (`Ctrl+F`) | Keys, values or both · contains / case-sensitive / regex · next & previous · match count · jumps to the node in the tree |
+| **Analyzer** | Duplicate array entries, objects with inconsistent shapes, mixed-type arrays, empty values, unusually deep nesting (plus any plugin analyzers) |
+| **Notes** | Bookmark nodes and attach notes; both are saved in sessions |
+| **Diagnostics** | Parse time, peak memory, in-memory size, node count, depth |
+| **Format ▾** | Beautify (2 or 4 spaces), minify, normalize (sort keys) |
+| **Repair** | Fixes trailing commas, single quotes, unquoted keys and unterminated brackets — shows what it will change and asks first |
+| **Duplicate keys** | A warning banner appears when an object repeats a key (plain `json.loads` silently drops all but the last) |
+| **JSONL / NDJSON** | `.jsonl` / `.ndjson` files open as arrays of records |
+| **Statistics** | Node count, depth, and counts of strings / numbers / booleans / nulls plus byte size in the status bar |
 
-```json
-{
-  "company": "Example Company",
-  "departments": [
-    {
-      "name": "Engineering",
-      "members": [
-        {
-          "name": "Alice",
-          "active": true
-        }
-      ]
-    }
-  ]
-}
+### Query — **Filter**, **Query**, **jq** groups
+
+- **Advanced filter** — keep only branches matching a key / value / type, preserving the surrounding hierarchy.
+- **JSONPath** — run expressions, browse results, copy path / value / everything as JSON; query history.
+- **jq** — a pure-Python subset of jq with history (see the [reference](#jq-lite-reference)).
+
+### Compare — **Diff** group
+
+- Side-by-side compare with added / removed / changed / type-changed values.
+- **Match by key** — compare arrays of objects by an identity field (e.g. `id`) instead of position, so reordering isn't reported as changes.
+- **Breaking changes only** — filters to removed properties and type changes (and newly *required* properties when compared with a schema).
+- **Export report** — Markdown diff report.
+- **API response diff** — the API client can send a response straight to either side; "Compare Environments" runs one request against two environments and sends both results here.
+
+### Validate — **Schema** and **OpenAPI** groups
+
+- **JSON Schema** (Draft 2020-12) — validate with errors shown by JSON path, or **generate a schema from a sample** payload.
+- **OpenAPI** — validate a payload against one operation's response schema in an OpenAPI 3.x document (local `$ref`s are resolved).
+
+### Transform — **Convert** and **Code** groups
+
+- **Convert** — JSON ⇄ YAML, XML and CSV in both directions, with "Load into Jsonify".
+- **Code generator** — typed models from a sample payload: **C#, Java, TypeScript, Python (dataclasses), Go, Kotlin**.
+
+### Protect — **Mask** and **Export** groups
+
+- **Sensitive-data detection** — by key name (`password`, `token`, …) *and* by value: emails, phone numbers, JWTs, API keys (AWS, OpenAI, GitHub, Slack, Google, private-key blocks, bearer tokens) and connection strings.
+- **Masking** — mask selected fields, or **Auto-Mask Detected** to mask every finding by path. The original is never modified.
+- **Export** — formatted JSON, masked JSON, **Safe JSON** (auto-masks detected data before writing), CSV, and graph images.
+
+> Detection is heuristic and tuned to avoid false positives. It is a safety net, not a guarantee — review masked output before sharing it.
+
+### API client — **API** group
+
+- Methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
+- Query-parameter table, headers, **JSON or form body**.
+- **Auth**: Basic, Bearer token, API key (header or query), custom header.
+- Response viewer: status, time, **size**, headers, body.
+- **Environments** (Dev / Test / QA / Prod, and your own) with `{{variable}}` substitution — e.g. `{{base_url}}/users`.
+- **History** and **Collections** you can re-run.
+- **Import cURL** / **Copy as cURL**, and **Code…** to generate Python, JavaScript, C# or Java for the request.
+
+### Developer tools — **Tools** group
+
+JWT decoder (header, payload, expiry — *decoded locally, signature not verified*), Base64 encode/decode, JSON string escape/unescape, Unix ⇄ ISO timestamp converter, UUID generate/find/inspect, and hashes (MD5, SHA-1, SHA-256, SHA-512, SHA3-256, BLAKE2b).
+
+### Workspace
+
+- **Multiple tabs** — several documents at once; `Ctrl+Tab` cycles.
+- **Sessions** — save the document plus the selected tool, JSONPath query, bookmarks and notes to a `.jsonify` file.
+- **Crash recovery** — open tabs are snapshotted every 30 seconds; after an abnormal exit you're offered a restore.
+- **Command palette** (`Ctrl+Shift+P`) — search every action.
+- **Batch processing** — File → Batch Process… validates / formats / minifies / normalizes / masks / converts many files.
+- **Themes** — see [Themes](#themes).
+- **Optional update check** — off by default (Settings → *Check for Updates on Startup*, or About → *Check for Updates…*). It only *tells* you a newer release exists; it never downloads or installs anything.
+
+---
+
+## Command-line interface
+
+The CLI shares its code with the app, never needs a display, and works in scripts and CI. After `pip install -e .` there is a `jsonify` command; from a source checkout use `python -m jsonify` (or `run_dev.cmd cli …`); in a production build use `jsonify-cli.exe`.
+
+```text
+jsonify                       open the desktop app
+jsonify file.json             open the desktop app with a file
+jsonify --portable            open the app in portable mode
+
+jsonify format   FILE|-  [-i N] [--sort-keys] [-o OUT] [--in-place]
+jsonify minify   FILE|-  [-o OUT]
+jsonify validate FILE... (files, folders or globs)
+jsonify diff     OLD NEW [--key ID] [--breaking] [--report OUT.md]
+jsonify mask     FILE    [-o OUT]
+jsonify convert  FILE (--to yaml|xml|csv | --from yaml|xml|csv) [-o OUT]
+jsonify query    FILE EXPR [--jsonpath]
+jsonify schema   FILE [--validate SCHEMA] [-o OUT]
+jsonify codegen  FILE --lang csharp|java|typescript|python|go|kotlin [--name Root]
+jsonify batch    OPERATION INPUT... [-o DIR] [-i N] [--in-place]
 ```
 
-Jsonify also supports multiple consecutive JSON documents:
+`OPERATION` for `batch`: `validate`, `format`, `minify`, `normalize`, `mask`, `yaml`, `xml`, `csv`.
 
-```json
-{"company": "Company A"}
-{"company": "Company B"}
-{"company": "Company C"}
+Exit codes: **0** success · **1** the check found problems (invalid JSON, differences, schema errors) · **2** usage or I/O error. That makes it drop-in for CI:
+
+```powershell
+jsonify validate .\config\           # fails the build on any invalid file
+jsonify diff old.json new.json --key id --breaking
+jsonify batch format .\data -o .\formatted
+type response.json | jsonify format -
 ```
 
 ---
 
-## Views
+## jq-lite reference
 
-Jsonify provides four ways to inspect a loaded JSON payload.
+Jsonify's **jq** tab and `jsonify query` run a small, pure-Python subset of [jq](https://jqlang.github.io/jq/) — no `libjq` or extra install. It is **not** full jq.
 
-### Normal View
+| Syntax | Meaning |
+|---|---|
+| `.` | the whole value |
+| `.a.b.c` | field access (missing → `null`) |
+| `.a[0]`, `.a[-1]` | array index |
+| `.a[]`, `.[]` | iterate an array's items or an object's values |
+| `keys` | sorted keys of an object |
+| `length` | length of an array / object / string; absolute value of a number |
+| `select(.a == 1)` | keep the item if the condition holds — `==` `!=` `<` `>` `<=` `>=`, or just `select(.active)` for truthiness |
+| `map(.a)` | apply a field path to each element of an array |
+| `a \| b \| c` | pipe: each stage runs on every result of the previous one |
 
-Displays the JSON structure using an expandable tree.
+```text
+.users[] | select(.active == true) | .name
+.orders[] | select(.total > 100)
+.items | map(.id)
+```
 
-Each entry shows:
-
-- Key or array index
-- Value
-- JSON data type
-
-This view is useful for quickly navigating nested objects and arrays.
-
-### Hierarchy View
-
-Displays the complete JSON structure as formatted hierarchical text.
-
-This is useful when the relationship between nested objects needs to be inspected without manually expanding tree nodes.
-
-### Filtered View
-
-Allows JSON structures to be explored by selecting keys level by level.
-
-The available keys are dynamically determined from the currently selected hierarchy path.
-
-This makes it easier to inspect specific portions of large JSON documents.
-
-### Graph View
-
-Displays the JSON hierarchy as an interactive graph.
-
-The graph is rendered using D3.js and supports:
-
-- Zoom in
-- Zoom out
-- Mouse-wheel zoom
-- Pan
-- Reset view
-- Fit entire graph
-- Parent-child relationship visualization
-
-D3.js is bundled locally with the application, allowing the graph to work without requiring an internet connection.
+Anything else (functions like `sort_by`, `group_by`, string interpolation, `reduce`, …) is reported as unsupported rather than guessed at.
 
 ---
 
-## Technology Stack
+## Keyboard shortcuts
 
-- Python
-- PySide6
-- Qt
-- D3.js
-- HTML
-- CSS
-- JavaScript
-- pytest
+| Shortcut | Action |
+|---|---|
+| `Ctrl+N` | New document |
+| `Ctrl+O` | Open file |
+| `Ctrl+Enter` | Load JSON from the editor |
+| `Ctrl+F` | Search keys / values |
+| `Ctrl+Shift+P` | Command palette |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous document |
+| `Ctrl+W` | Close document |
+| `Ctrl+Shift+O` | Open session |
+| `Ctrl+Shift+S` | Save session |
+| `Ctrl+Q` | Quit |
+
+Everything else is reachable through the command palette.
 
 ---
 
-## Project Structure
+## Themes
+
+Settings → **Theme**: *Follow System*, **Dark+**, **Light+**, **Monokai**, **Solarized Dark**, **Solarized Light**, **Dracula**, **Nord**, **High Contrast**. Themes restyle the whole window and the editor's syntax colors, and your choice is remembered. (The Graph view draws on its own dark canvas and isn't affected.)
+
+---
+
+## Portable mode and data locations
+
+Jsonify keeps a few small files: settings, recent files, crash-recovery snapshot, API history / collections / environments, and plugins.
+
+| Mode | Location |
+|---|---|
+| Normal | `~/.jsonify/` (`C:\Users\<you>\.jsonify\`) |
+| **Portable** | a `data` folder next to the app |
+| Override | the folder in the `JSONIFY_DATA_DIR` environment variable |
+
+Portable mode turns on when **any** of these is true: you start with `--portable`, the `JSONIFY_PORTABLE` environment variable is set, or a file named `portable.flag` sits next to the executable.
+
+To make a portable copy of a release: `build_prod.cmd --portable` produces `dist\Jsonify-<version>-portable.zip` — unzip it anywhere (USB stick, shared drive) and run `Jsonify.exe`; nothing is installed and nothing is written outside that folder. (About → *About* shows the current mode and data folder.)
+
+Nothing sensitive is stored except what you type into the API client (environment variables, saved requests). Treat `api_workspace.json` accordingly.
+
+---
+
+## Plugins
+
+Plugins can add **converters**, **analyzers** and **tools**. A plugin is a Python file with a `register(registry)` function. Drop it in the `plugins` folder inside the data folder (`~/.jsonify/plugins/`), or ship it as a package that exposes an entry point in the `jsonify.plugins` group.
+
+```python
+# ~/.jsonify/plugins/toml_support.py
+import tomllib
+
+
+def register(registry):
+    registry.register_converter("TOML", to_json=lambda text: tomllib.loads(text))
+
+    def find_empty_names(payload):
+        return ["found an empty 'name'"] if isinstance(payload, dict) and payload.get("name") == "" else []
+
+    registry.register_analyzer("Empty names", find_empty_names)
+    registry.register_tool("Reverse", lambda text: text[::-1])
+```
+
+- Converters appear in the **Convert** tab's format lists (a converter may provide `to_json`, `from_json`, or both).
+- Analyzers run whenever a document loads and report in the **Analyzer** tab.
+- A plugin that fails to load never breaks the app — see About → *Loaded Plugins* for the list and any errors.
+
+Plugins run with the same permissions as Jsonify, so only install ones you trust.
+
+---
+
+## Project structure
 
 ```text
 Jsonify/
-│
-├── src/
-│   └── jsonify/
-│       │
-│       ├── __init__.py
-│       ├── __main__.py
-│       │
-│       ├── core/
-│       │   ├── __init__.py
-│       │   ├── models.py
-│       │   ├── parser.py
-│       │   └── traversal.py
-│       │
-│       ├── resources/
-│       │   ├── __init__.py
-│       │   └── d3.min.js
-│       │
-│       ├── services/
-│       │   ├── __init__.py
-│       │   ├── graph_service.py
-│       │   └── json_service.py
-│       │
-│       └── ui/
-│           ├── __init__.py
-│           ├── constants.py
-│           ├── main_window.py
-│           │
-│           └── widgets/
-│               ├── __init__.py
-│               ├── graph_view.py
-│               ├── hierarchy_view.py
-│               └── tree_view.py
-│
-├── tests/
-│   ├── __init__.py
-│   ├── test_parser.py
-│   ├── test_traversal.py
-│   ├── test_json_service.py
-│   └── test_graph_service.py
-│
-├── .gitignore
-├── README.md
-├── pyproject.toml
-└── requirements.txt
+├── src/jsonify/
+│   ├── __main__.py          entry point: CLI dispatch or desktop app
+│   ├── cli.py               command-line interface (no Qt)
+│   ├── core/                pure logic — parsing, diff, jq, schema, codegen, masking,
+│   │                        converters, cURL, plugins, ...   (no Qt, no I/O framework)
+│   ├── services/            app-level services — API client, batch, export, sessions,
+│   │                        schema/OpenAPI, updates, local state
+│   ├── ui/
+│   │   ├── main_window.py   tabs, menus, themes, recovery, updates
+│   │   ├── theme.py         theme registry and stylesheet template
+│   │   └── widgets/         DocumentTab, editor, tree, API view, diff, tools, ...
+│   └── resources/           bundled D3 and app icon (works offline)
+├── tests/                   pytest suite (core, services, CLI, packaging)
+├── scripts/build.py         production build (PyInstaller, portable zip, installer)
+├── installer/Jsonify.iss    Inno Setup script
+├── Jsonify.spec             PyInstaller configuration
+├── run_dev.cmd | run_dev.sh     development launcher
+├── run_prod.cmd | build_prod.cmd   production launcher / builder
+├── pyproject.toml           packaging + tool configuration (source of truth)
+└── requirements*.txt        pip requirement files (runtime / dev / build)
 ```
+
+The layers depend downward only: `ui` → `services` → `core`. Most tests exercise `core` and `services` without a display; the CLI is a thin layer over the same code.
 
 ---
 
-## Architecture
-
-Jsonify follows a layered structure that separates JSON processing, application services, user-interface logic, and static resources.
-
-```text
-┌─────────────────────────────────────┐
-│              UI Layer               │
-│                                     │
-│  MainWindow                         │
-│  Tree View                          │
-│  Hierarchy View                     │
-│  Filtered View                      │
-│  Graph View                         │
-└──────────────────┬──────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│           Service Layer             │
-│                                     │
-│  JsonService                        │
-│  GraphService                       │
-└──────────────────┬──────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│             Core Layer              │
-│                                     │
-│  Parser                             │
-│  Traversal                          │
-│  Models                             │
-└─────────────────────────────────────┘
-
-        Static Resources
-               │
-               ▼
-          d3.min.js
-```
-
-### Core Layer
-
-The `core` package contains JSON-related logic that does not depend on the graphical user interface.
-
-#### `models.py`
-
-Defines shared JSON type aliases used throughout the application.
-
-#### `parser.py`
-
-Handles JSON parsing, including support for multiple consecutive JSON documents.
-
-#### `traversal.py`
-
-Contains recursive JSON operations including:
-
-- Unique-key extraction
-- Key searching
-- JSON path generation
-- JSON statistics
-
-### Service Layer
-
-The `services` package provides application-level operations between the core functionality and the UI.
-
-#### `json_service.py`
-
-Provides high-level JSON operations used by the application.
-
-#### `graph_service.py`
-
-Handles generated graph HTML files, including temporary file creation and cleanup.
-
-### UI Layer
-
-The `ui` package contains PySide6 user-interface components.
-
-#### `main_window.py`
-
-Contains the main application window and coordinates interactions between the editor, services, and visualization components.
-
-#### `widgets/tree_view.py`
-
-Creates and populates the expandable JSON tree.
-
-#### `widgets/hierarchy_view.py`
-
-Generates hierarchy and filtered hierarchy representations.
-
-#### `widgets/graph_view.py`
-
-Transforms JSON structures into graph data and generates the interactive D3.js visualization.
-
-### Resources
-
-Static resources required by the application are stored separately from Python source code.
-
-```text
-resources/
-├── __init__.py
-└── d3.min.js
-```
-
-The bundled D3.js resource allows graph visualization without downloading D3 at runtime.
-
----
-
-## Requirements
-
-Python 3.12 or later is recommended.
-
-The primary application dependency is:
-
-```text
-PySide6
-```
-
-Development dependencies include:
-
-```text
-pytest
-pytest-cov
-ruff
-mypy
-```
-
----
-
-## Installation
-
-Clone the repository:
+## Development
 
 ```powershell
-git clone <repository-url>
-```
-
-Move into the project directory:
-
-```powershell
-cd Jsonify
-```
-
-Create a virtual environment:
-
-```powershell
-python -m venv venv
-```
-
-Activate the virtual environment in PowerShell:
-
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-
-Upgrade pip:
-
-```powershell
-python -m pip install --upgrade pip
-```
-
-Install Jsonify in editable mode:
-
-```powershell
-python -m pip install -e .
-```
-
-For development, install the optional development dependencies:
-
-```powershell
-python -m pip install -e ".[dev]"
-```
-
----
-
-## Running the Application
-
-After installation, start Jsonify with:
-
-```powershell
-python -m jsonify
-```
-
-If the project script entry point is installed, it can also be started with:
-
-```powershell
-jsonify
-```
-
----
-
-## Using Jsonify
-
-Start the application:
-
-```powershell
-python -m jsonify
-```
-
-Paste a JSON payload into the **JSON Editor**.
-
-Click:
-
-```text
-Load JSON
-```
-
-After the JSON has been parsed successfully, use the available viewer tabs:
-
-```text
-Normal View
-Hierarchy View
-Filtered View
-Graph View
-```
-
----
-
-## Graph Controls
-
-The Graph View provides several navigation controls.
-
-### Zoom In
-
-```text
-+
-```
-
-Increases the graph zoom level.
-
-### Zoom Out
-
-```text
--
-```
-
-Decreases the graph zoom level.
-
-### Reset
-
-```text
-Reset
-```
-
-Returns the graph to its default readable zoom and starting position.
-
-### Fit
-
-```text
-Fit
-```
-
-Fits the entire graph into the available viewport.
-
-For large JSON documents, the Fit operation may intentionally display nodes at a smaller scale so that the complete hierarchy is visible.
-
-The graph can also be panned and zoomed interactively.
-
----
-
-## Running Tests
-
-Run the complete test suite:
-
-```powershell
-python -m pytest
-```
-
-Run tests with detailed output:
-
-```powershell
-python -m pytest -v
-```
-
-Run tests with coverage:
-
-```powershell
+run_dev.cmd test                       # pytest
+run_dev.cmd check                      # ruff check, ruff format --check, mypy, pytest
 python -m pytest --cov=jsonify --cov-report=term-missing
+python -m ruff check . --fix           # lint (and auto-fix)
+python -m ruff format .                # format
+python -m mypy                         # types: core, services, CLI
 ```
 
-Generate an HTML coverage report:
-
-```powershell
-python -m pytest --cov=jsonify --cov-report=html
-```
-
-The generated report will be available under:
-
-```text
-htmlcov/
-```
+- **Style** — Ruff, line length 100, double quotes.
+- **Types** — mypy covers `core`, `services` and the CLI. The Qt widget layer is excluded deliberately: PySide6 method overrides trip mypy's override checks and would bury real problems in noise.
+- **Dependencies** — declare them in `pyproject.toml`; `requirements.txt` mirrors the runtime list and a test fails if they drift apart. The version lives in `src/jsonify/__init__.py` (and `installer/Jsonify.iss`); a test keeps them equal.
+- **Adding a feature** — put the logic in `core/` (or `services/` if it needs I/O), unit-test it, then add a thin widget in `ui/widgets/`.
 
 ---
 
-## Code Quality
+## Building a release
 
-### Ruff
-
-Run the Ruff linter:
-
-```powershell
-python -m ruff check .
-```
-
-Automatically fix supported issues:
-
-```powershell
-python -m ruff check . --fix
-```
-
-Check formatting:
-
-```powershell
-python -m ruff format --check .
-```
-
-Format the project:
-
-```powershell
-python -m ruff format .
-```
-
-### Mypy
-
-Run static type checking:
-
-```powershell
-python -m mypy src/jsonify
-```
-
----
-
-## Development Workflow
-
-A typical development workflow is:
-
-```powershell
-git pull
-
-.\venv\Scripts\Activate.ps1
-
-python -m pip install -e ".[dev]"
-
-python -m pytest
-
-python -m ruff check .
-
-python -m jsonify
-```
-
-Before creating a pull request, verify that:
-
-- The application starts successfully.
-- JSON loading works.
-- Normal View works.
-- Hierarchy View works.
-- Filtered View works.
-- Graph View works.
-- Tests pass.
-- Ruff reports no unexpected issues.
-
----
-
-## Example JSON
-
-The following payload can be used for a quick application test:
-
-```json
-{
-  "company": "Example Robotics",
-  "departments": [
-    {
-      "name": "Engineering",
-      "teams": [
-        {
-          "name": "Firmware",
-          "members": [
-            {
-              "name": "Alice",
-              "tasks": [
-                {
-                  "id": "T-1",
-                  "title": "Bootloader update",
-                  "status": "done",
-                  "subtasks": [
-                    {
-                      "id": "ST-1",
-                      "description": "Update flash driver",
-                      "done": true
-                    },
-                    {
-                      "id": "ST-2",
-                      "description": "Run regression tests",
-                      "done": true
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
----
-
-## Development Principles
-
-The project is structured around several principles:
-
-**Separation of concerns** — parsing, business logic, visualization, and UI code are kept in separate modules.
-
-**Testability** — core functionality and services are designed so they can be tested without launching the desktop interface.
-
-**Maintainability** — large features are separated into focused modules rather than being placed in a single application file.
-
-**Offline graph support** — D3.js is bundled as an application resource rather than fetched from the internet every time the graph is opened.
-
-**Package-based execution** — the application uses the `src` package layout and can be launched using `python -m jsonify`.
+1. Bump `__version__` in `src/jsonify/__init__.py`, `version` in `pyproject.toml`, and `MyAppVersion` in `installer/Jsonify.iss` (`run_dev.cmd test` fails until they agree).
+2. `run_dev.cmd check`
+3. `build_prod.cmd --clean --portable --installer`
+4. Publish `installer-output\Jsonify-Setup-<version>.exe` and `dist\Jsonify-<version>-portable.zip` as a GitHub Release tagged `v<version>` — the in-app update check reads the latest release tag.
 
 ---
 
 ## Troubleshooting
 
-### `No module named jsonify`
+**`python` / `py` is not recognized** — install Python 3.11+ and tick *Add python.exe to PATH*, then run `run_dev.cmd` again.
 
-Install the project in editable mode:
+**The first `run_dev.cmd` looks stuck** — it's downloading PySide6 (~150 MB). Later runs are instant.
 
-```powershell
-python -m pip install -e .
-```
+**`No module named jsonify`** — you're outside the virtual environment. Use `run_dev.cmd`, or `.\venv\Scripts\Activate.ps1` and `pip install -e .`.
 
-Then verify the package:
+**The Graph view is blank or export to PNG/PDF fails** — the graph uses Qt WebEngine. Make sure PySide6 installed completely (`pip install --force-reinstall PySide6`). The tab needs no internet — D3 is bundled.
 
-```powershell
-python -c "import jsonify; print(jsonify.__file__)"
-```
+**A large file feels slow** — the tree is lazy and paged, but the Hierarchy view is intentionally skipped past a safety limit. Use the tree, JSONPath or jq for huge documents. The Diagnostics tab shows where the time goes.
 
-### Graph View does not display
+**The packaged app doesn't start** — run `dist\Jsonify\jsonify-cli.exe --version` to check the build itself; rebuild with `build_prod.cmd --clean`.
 
-Verify that the D3.js resource exists:
-
-```text
-src/jsonify/resources/d3.min.js
-```
-
-Test resource loading:
-
-```powershell
-python -c "from importlib.resources import files; p=files('jsonify.resources').joinpath('d3.min.js'); print(len(p.read_text(encoding='utf-8')))"
-```
-
-If a positive file size is displayed, the D3 resource is being found successfully.
-
-### Tests cannot import `jsonify`
-
-Install the package and development dependencies:
-
-```powershell
-python -m pip install -e ".[dev]"
-```
-
-Then run:
-
-```powershell
-python -m pytest
-```
+**Reset everything** — close Jsonify and delete the data folder (see [above](#portable-mode-and-data-locations)).
 
 ---
 
 ## License
 
-No license has been specified for this project yet.
+No license has been chosen for this project, so no rights are granted beyond those the repository owner allows. Add a `LICENSE` file if you intend others to use or redistribute it.

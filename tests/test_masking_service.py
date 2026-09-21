@@ -17,9 +17,7 @@ def test_get_fields() -> None:
         },
     }
 
-    result = service.get_fields(
-        payload
-    )
+    result = service.get_fields(payload)
 
     assert result == [
         "email",
@@ -37,9 +35,7 @@ def test_detect_fields() -> None:
         "token": "abc123",
     }
 
-    result = service.detect_fields(
-        payload
-    )
+    result = service.detect_fields(payload)
 
     assert result == [
         "password",
@@ -77,10 +73,7 @@ def test_email_field() -> None:
         email_fields={"email"},
     )
 
-    assert (
-        result["email"]
-        == "a****@example.com"
-    )
+    assert result["email"] == "a****@example.com"
 
 
 def test_partial_field() -> None:
@@ -93,15 +86,10 @@ def test_partial_field() -> None:
     result = service.mask(
         payload=payload,
         fields=["accountNumber"],
-        partial_fields={
-            "accountNumber"
-        },
+        partial_fields={"accountNumber"},
     )
 
-    assert (
-        result["accountNumber"]
-        == "12******90"
-    )
+    assert result["accountNumber"] == "12******90"
 
 
 def test_unselected_fields_are_unchanged() -> None:
@@ -120,7 +108,4 @@ def test_unselected_fields_are_unchanged() -> None:
 
     assert result["name"] == "Alice"
 
-    assert (
-        result["email"]
-        == "alice@example.com"
-    )
+    assert result["email"] == "alice@example.com"

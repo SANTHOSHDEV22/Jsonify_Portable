@@ -1,0 +1,21 @@
+# ============================================================
+# Jsonify - development dependencies
+#
+#   pip install -r requirements-dev.txt
+#
+# Includes the runtime dependencies plus testing, linting and
+# type-checking tools.
+# ============================================================
+
+-r requirements.txt
+
+# Testing
+pytest>=8.0
+pytest-cov>=5.0
+
+# Code quality
+ruff>=0.8
+
+# Static type checking (core / services / CLI)
+mypy>=1.13
+types-PyYAML

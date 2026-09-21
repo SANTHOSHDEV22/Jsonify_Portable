@@ -266,19 +266,59 @@ def test_multiple_differences() -> None:
     assert len(result) == 3
 
     assert any(
-        difference.diff_type == DiffType.REMOVED
-        and difference.path == "$.age"
+        difference.diff_type == DiffType.REMOVED and difference.path == "$.age"
         for difference in result
     )
 
     assert any(
-        difference.diff_type == DiffType.ADDED
-        and difference.path == "$.role"
+        difference.diff_type == DiffType.ADDED and difference.path == "$.role"
         for difference in result
     )
 
     assert any(
-        difference.diff_type == DiffType.CHANGED
-        and difference.path == "$.status"
+        difference.diff_type == DiffType.CHANGED and difference.path == "$.status"
         for difference in result
     )
+
+
+def test_array_identity_diff_detects_reordering_as_no_change() -> None:
+    old = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+    new = [{"id": 2, "name": "Bob"}, {"id": 1, "name": "Alice"}]
+
+    positional = compare_json(old, new)
+    assert positional != []  # reordering looks like changes by index
+
+    by_identity = compare_json(old, new, array_identity_key="id")
+    assert by_identity == []
+
+
+def test_array_identity_diff_detects_added_and_removed() -> None:
+    old = [{"id": 1, "name": "Alice"}]
+    new = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+
+    result = compare_json(old, new, array_identity_key="id")
+
+    assert len(result) == 1
+    assert result[0].diff_type == DiffType.ADDED
+    assert "id=2" in result[0].path
+
+
+def test_array_identity_diff_detects_field_change_on_matched_item() -> None:
+    old = [{"id": 1, "status": "active"}]
+    new = [{"id": 1, "status": "inactive"}]
+
+    result = compare_json(old, new, array_identity_key="id")
+
+    assert len(result) == 1
+    assert result[0].diff_type == DiffType.CHANGED
+    assert result[0].path == "$[id=1].status"
+
+
+def test_array_identity_diff_falls_back_when_key_missing() -> None:
+    old = [{"name": "Alice"}]
+    new = [{"name": "Bob"}]
+
+    result = compare_json(old, new, array_identity_key="id")
+
+    assert len(result) == 1
+    assert result[0].path == "$[0].name"

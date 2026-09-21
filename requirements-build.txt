@@ -1,0 +1,11 @@
+# ============================================================
+# Jsonify - production build dependencies
+#
+#   pip install -r requirements-build.txt
+#
+# Runtime dependencies plus PyInstaller (see scripts/build.py).
+# ============================================================
+
+-r requirements.txt
+
+pyinstaller>=6.0

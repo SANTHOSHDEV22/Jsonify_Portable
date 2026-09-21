@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 from jsonify.core.models import JSONValue
 
@@ -41,6 +42,8 @@ class JsonDiff:
 def compare_json(
     old: JSONValue,
     new: JSONValue,
+    *,
+    array_identity_key: str | None = None,
 ) -> list[JsonDiff]:
     """
     Compare two JSON values recursively.
@@ -51,6 +54,13 @@ def compare_json(
 
         new:
             New JSON value.
+
+        array_identity_key:
+            When set, arrays of objects are matched by this key's value
+            (e.g. ``"id"``) instead of by position — an item that moved
+            from index 2 to index 0 is no longer reported as two
+            unrelated changes. Arrays whose items aren't all objects
+            containing this key fall back to positional comparison.
 
     Returns:
         All differences between the two values.
@@ -63,6 +73,7 @@ def compare_json(
         new=new,
         path="$",
         differences=differences,
+        array_identity_key=array_identity_key,
     )
 
     return differences
@@ -73,6 +84,7 @@ def _compare_values(
     new: JSONValue,
     path: str,
     differences: list[JsonDiff],
+    array_identity_key: str | None = None,
 ) -> None:
     """Recursively compare two JSON values."""
 
@@ -93,6 +105,7 @@ def _compare_values(
             new=new,
             path=path,
             differences=differences,
+            array_identity_key=array_identity_key,
         )
         return
 
@@ -102,6 +115,7 @@ def _compare_values(
             new=new,
             path=path,
             differences=differences,
+            array_identity_key=array_identity_key,
         )
         return
 
@@ -121,6 +135,7 @@ def _compare_objects(
     new: dict[str, JSONValue],
     path: str,
     differences: list[JsonDiff],
+    array_identity_key: str | None = None,
 ) -> None:
     """Compare two JSON objects."""
 
@@ -155,6 +170,7 @@ def _compare_objects(
             new=new[key],
             path=_object_path(path, key),
             differences=differences,
+            array_identity_key=array_identity_key,
         )
 
 
@@ -163,8 +179,23 @@ def _compare_arrays(
     new: list[JSONValue],
     path: str,
     differences: list[JsonDiff],
+    array_identity_key: str | None = None,
 ) -> None:
-    """Compare two JSON arrays by index."""
+    """Compare two JSON arrays, by identity key if usable, else by index."""
+
+    if (
+        array_identity_key
+        and _all_have_identity(old, array_identity_key)
+        and _all_have_identity(new, array_identity_key)
+    ):
+        _compare_arrays_by_identity(
+            old=old,
+            new=new,
+            path=path,
+            differences=differences,
+            key=array_identity_key,
+        )
+        return
 
     common_length = min(
         len(old),
@@ -177,6 +208,7 @@ def _compare_arrays(
             new=new[index],
             path=f"{path}[{index}]",
             differences=differences,
+            array_identity_key=array_identity_key,
         )
 
     for index in range(common_length, len(old)):
@@ -195,6 +227,61 @@ def _compare_arrays(
                 path=f"{path}[{index}]",
                 new_value=new[index],
             )
+        )
+
+
+def _all_have_identity(items: list[JSONValue], key: str) -> bool:
+    """Return whether every item is an object containing ``key``."""
+
+    return bool(items) and all(isinstance(item, dict) and key in item for item in items)
+
+
+def _index_by_identity(items: list[JSONValue], key: str) -> dict[Any, dict[str, JSONValue]]:
+    """Map identity value -> item, for items already known to be objects."""
+
+    return {item[key]: item for item in items if isinstance(item, dict)}
+
+
+def _compare_arrays_by_identity(
+    old: list[JSONValue],
+    new: list[JSONValue],
+    path: str,
+    differences: list[JsonDiff],
+    key: str,
+) -> None:
+    """Compare two arrays of objects, matching items by identity value."""
+
+    old_by_id = _index_by_identity(old, key)
+    new_by_id = _index_by_identity(new, key)
+
+    old_ids = set(old_by_id)
+    new_ids = set(new_by_id)
+
+    for identity in sorted(old_ids - new_ids, key=str):
+        differences.append(
+            JsonDiff(
+                diff_type=DiffType.REMOVED,
+                path=f"{path}[{key}={identity!r}]",
+                old_value=old_by_id[identity],
+            )
+        )
+
+    for identity in sorted(new_ids - old_ids, key=str):
+        differences.append(
+            JsonDiff(
+                diff_type=DiffType.ADDED,
+                path=f"{path}[{key}={identity!r}]",
+                new_value=new_by_id[identity],
+            )
+        )
+
+    for identity in sorted(old_ids & new_ids, key=str):
+        _compare_values(
+            old=old_by_id[identity],
+            new=new_by_id[identity],
+            path=f"{path}[{key}={identity!r}]",
+            differences=differences,
+            array_identity_key=key,
         )
 
 
@@ -217,10 +304,7 @@ def _object_path(
     if key.isidentifier():
         return f"{parent}.{key}"
 
-    escaped_key = (
-        key.replace("\\", "\\\\")
-        .replace('"', '\\"')
-    )
+    escaped_key = key.replace("\\", "\\\\").replace('"', '\\"')
 
     return f'{parent}["{escaped_key}"]'
 

@@ -26,7 +26,7 @@ DefaultGroupName={#MyAppName}
 
 DisableProgramGroupPage=yes
 
-OutputDir=output
+OutputDir=..\installer-output
 OutputBaseFilename=Jsonify-Setup-{#MyAppVersion}
 
 Compression=lzma2

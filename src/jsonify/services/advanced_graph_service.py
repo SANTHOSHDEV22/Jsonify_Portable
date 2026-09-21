@@ -103,9 +103,7 @@ class AdvancedGraphService:
             node_id = next_id
             next_id += 1
 
-            node_type = self._type_name(
-                value
-            )
+            node_type = self._type_name(value)
 
             if isinstance(value, dict):
                 object_nodes += 1
@@ -128,9 +126,7 @@ class AdvancedGraphService:
                     node_type=node_type,
                     value=self._preview(value),
                     depth=depth,
-                    has_children=self._has_children(
-                        value
-                    ),
+                    has_children=self._has_children(value),
                 )
             )
 
@@ -204,9 +200,7 @@ class AdvancedGraphService:
                 )
 
         elif isinstance(value, list):
-            for index, child in enumerate(
-                value
-            ):
+            for index, child in enumerate(value):
                 children.append(
                     (
                         child,
@@ -224,32 +218,21 @@ class AdvancedGraphService:
         """Create a short node value."""
 
         if isinstance(value, dict):
-            return (
-                f"{len(value)} properties"
-            )
+            return f"{len(value)} properties"
 
         if isinstance(value, list):
-            return (
-                f"{len(value)} items"
-            )
+            return f"{len(value)} items"
 
         if value is None:
             return "null"
 
         if isinstance(value, bool):
-            return (
-                "true"
-                if value
-                else "false"
-            )
+            return "true" if value else "false"
 
         text = str(value)
 
         if len(text) > self.preview_length:
-            return (
-                text[: self.preview_length]
-                + "..."
-            )
+            return text[: self.preview_length] + "..."
 
         return text
 
@@ -259,10 +242,7 @@ class AdvancedGraphService:
     ) -> bool:
         """Return whether a node has children."""
 
-        return (
-            isinstance(value, (dict, list))
-            and bool(value)
-        )
+        return isinstance(value, (dict, list)) and bool(value)
 
     @staticmethod
     def _type_name(
@@ -303,11 +283,6 @@ class AdvancedGraphService:
         if key.isidentifier():
             return f"{parent}.{key}"
 
-        escaped = (
-            key.replace("\\", "\\\\")
-            .replace('"', '\\"')
-        )
+        escaped = key.replace("\\", "\\\\").replace('"', '\\"')
 
-        return (
-            f'{parent}["{escaped}"]'
-        )
+        return f'{parent}["{escaped}"]'

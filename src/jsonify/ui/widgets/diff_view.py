@@ -7,9 +7,12 @@ import json
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -20,9 +23,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from jsonify.core.breaking_changes import classify_diff
 from jsonify.core.diff import DiffType, JsonDiff
+from jsonify.core.diff_report import render_diff_report
 from jsonify.core.models import JSONValue
 from jsonify.services.diff_service import DiffService
+from jsonify.services.export_service import ExportError, ExportService
 from jsonify.ui.constants import MONOSPACE_FONT
 
 
@@ -36,11 +42,11 @@ class DiffView(QWidget):
     ) -> None:
         super().__init__(parent)
 
-        self._diff_service = (
-            diff_service
-            if diff_service is not None
-            else DiffService()
-        )
+        self._diff_service = diff_service if diff_service is not None else DiffService()
+        self._export_service = ExportService()
+
+        self._last_differences: list[JsonDiff] = []
+        self._last_breaking_paths: set[str] = set()
 
         self._setup_ui()
 
@@ -88,21 +94,32 @@ class DiffView(QWidget):
         controls = QHBoxLayout()
 
         self._compare_button = QPushButton("Compare")
-        self._compare_button.clicked.connect(
-            self._compare
-        )
+        self._compare_button.clicked.connect(self._compare)
 
         clear_button = QPushButton("Clear")
-        clear_button.clicked.connect(
-            self._clear
+        clear_button.clicked.connect(self._clear)
+
+        self._identity_key_input = QLineEdit()
+        self._identity_key_input.setPlaceholderText("Array identity key (e.g. id)")
+        self._identity_key_input.setMaximumWidth(220)
+
+        self._breaking_only_checkbox = QCheckBox("Breaking changes only")
+        self._breaking_only_checkbox.toggled.connect(
+            lambda _checked: self._display_differences(self._last_differences)
         )
 
-        self._summary_label = QLabel(
-            "No comparison performed."
-        )
+        self._export_report_button = QPushButton("Export Report...")
+        self._export_report_button.setEnabled(False)
+        self._export_report_button.clicked.connect(self._export_report)
+
+        self._summary_label = QLabel("No comparison performed.")
 
         controls.addWidget(self._compare_button)
         controls.addWidget(clear_button)
+        controls.addWidget(QLabel("Match by:"))
+        controls.addWidget(self._identity_key_input)
+        controls.addWidget(self._breaking_only_checkbox)
+        controls.addWidget(self._export_report_button)
         controls.addSpacing(15)
         controls.addWidget(self._summary_label)
         controls.addStretch()
@@ -132,12 +149,8 @@ class DiffView(QWidget):
         )
 
         self._results_table.setAlternatingRowColors(True)
-        self._results_table.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows
-        )
-        self._results_table.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers
-        )
+        self._results_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._results_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
         header = self._results_table.horizontalHeader()
 
@@ -183,13 +196,9 @@ class DiffView(QWidget):
 
         editor = QPlainTextEdit()
 
-        editor.setPlaceholderText(
-            f"Paste {title.lower()} here..."
-        )
+        editor.setPlaceholderText(f"Paste {title.lower()} here...")
 
-        editor.setLineWrapMode(
-            QPlainTextEdit.LineWrapMode.NoWrap
-        )
+        editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
         font = QFont(MONOSPACE_FONT)
         editor.setFont(font)
@@ -204,6 +213,16 @@ class DiffView(QWidget):
 
         return panel
 
+    def set_old_text(self, text: str) -> None:
+        """Populate the "Original JSON" editor (e.g. from an API response)."""
+
+        self._old_editor.setPlainText(text)
+
+    def set_new_text(self, text: str) -> None:
+        """Populate the "New JSON" editor (e.g. from an API response)."""
+
+        self._new_editor.setPlainText(text)
+
     def _compare(self) -> None:
         """Compare JSON entered in both editors."""
 
@@ -214,15 +233,17 @@ class DiffView(QWidget):
             QMessageBox.warning(
                 self,
                 "JSON Diff",
-                "Paste both the original JSON and new JSON "
-                "before comparing.",
+                "Paste both the original JSON and new JSON before comparing.",
             )
             return
+
+        identity_key = self._identity_key_input.text().strip() or None
 
         try:
             differences = self._diff_service.compare_text(
                 old_text=old_text,
                 new_text=new_text,
+                array_identity_key=identity_key,
             )
         except json.JSONDecodeError as error:
             QMessageBox.critical(
@@ -232,6 +253,10 @@ class DiffView(QWidget):
             )
             return
 
+        self._last_differences = differences
+        self._last_breaking_paths = {change.path for change in classify_diff(differences)}
+
+        self._export_report_button.setEnabled(bool(differences))
         self._display_differences(differences)
 
     def _display_differences(
@@ -242,9 +267,14 @@ class DiffView(QWidget):
 
         self._results_table.setRowCount(0)
 
+        if self._breaking_only_checkbox.isChecked():
+            differences = [d for d in differences if d.path in self._last_breaking_paths]
+
         if not differences:
             self._summary_label.setText(
                 "JSON documents are identical."
+                if not self._last_differences
+                else "No breaking changes."
             )
             return
 
@@ -255,44 +285,30 @@ class DiffView(QWidget):
             DiffType.TYPE_CHANGED: 0,
         }
 
-        self._results_table.setRowCount(
-            len(differences)
-        )
+        self._results_table.setRowCount(len(differences))
 
         for row, difference in enumerate(differences):
             counts[difference.diff_type] += 1
 
-            change_item = QTableWidgetItem(
-                self._change_label(difference)
-            )
+            change_item = QTableWidgetItem(self._change_label(difference))
 
-            path_item = QTableWidgetItem(
-                difference.path
-            )
+            path_item = QTableWidgetItem(difference.path)
 
             old_item = QTableWidgetItem(
                 self._display_value(
                     difference.old_value,
-                    missing=(
-                        difference.diff_type
-                        == DiffType.ADDED
-                    ),
+                    missing=(difference.diff_type == DiffType.ADDED),
                 )
             )
 
             new_item = QTableWidgetItem(
                 self._display_value(
                     difference.new_value,
-                    missing=(
-                        difference.diff_type
-                        == DiffType.REMOVED
-                    ),
+                    missing=(difference.diff_type == DiffType.REMOVED),
                 )
             )
 
-            color = self._change_color(
-                difference.diff_type
-            )
+            color = self._change_color(difference.diff_type)
 
             change_item.setForeground(color)
 
@@ -325,13 +341,11 @@ class DiffView(QWidget):
             )
 
         self._summary_label.setText(
-            (
-                f"{len(differences)} difference(s) — "
-                f"{counts[DiffType.ADDED]} added, "
-                f"{counts[DiffType.REMOVED]} removed, "
-                f"{counts[DiffType.CHANGED]} changed, "
-                f"{counts[DiffType.TYPE_CHANGED]} type changed"
-            )
+            f"{len(differences)} difference(s) — "
+            f"{counts[DiffType.ADDED]} added, "
+            f"{counts[DiffType.REMOVED]} removed, "
+            f"{counts[DiffType.CHANGED]} changed, "
+            f"{counts[DiffType.TYPE_CHANGED]} type changed"
         )
 
     def _clear(self) -> None:
@@ -341,10 +355,33 @@ class DiffView(QWidget):
         self._new_editor.clear()
 
         self._results_table.setRowCount(0)
+        self._last_differences = []
+        self._last_breaking_paths = set()
+        self._export_report_button.setEnabled(False)
 
-        self._summary_label.setText(
-            "No comparison performed."
+        self._summary_label.setText("No comparison performed.")
+
+    def _export_report(self) -> None:
+        """Export the last comparison as a Markdown report."""
+
+        if not self._last_differences:
+            return
+
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "Export Diff Report", "diff-report.md", "Markdown (*.md)"
         )
+        if not file_name:
+            return
+
+        report = render_diff_report(self._last_differences)
+
+        try:
+            self._export_service.export_text(report, file_name, extension=".md")
+        except ExportError as error:
+            QMessageBox.critical(self, "Export Diff Report", str(error))
+            return
+
+        self._summary_label.setText(f"Report exported to {file_name}")
 
     @staticmethod
     def _change_label(
@@ -359,10 +396,7 @@ class DiffView(QWidget):
             DiffType.TYPE_CHANGED: "Type Changed",
         }
 
-        return (
-            f"{difference.symbol} "
-            f"{labels[difference.diff_type]}"
-        )
+        return f"{difference.symbol} {labels[difference.diff_type]}"
 
     @staticmethod
     def _change_color(
@@ -414,8 +448,4 @@ class DiffView(QWidget):
     ) -> str:
         """Create a readable JSON parsing error."""
 
-        return (
-            f"{error.msg}\n\n"
-            f"Line: {error.lineno}\n"
-            f"Column: {error.colno}"
-        )
+        return f"{error.msg}\n\nLine: {error.lineno}\nColumn: {error.colno}"

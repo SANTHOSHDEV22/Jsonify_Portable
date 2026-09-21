@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +32,8 @@ class SessionService:
         payload: JSONValue,
         selected_tab: str = "",
         jsonpath_query: str = "",
+        bookmarks: list[str] | None = None,
+        annotations: dict[str, str] | None = None,
     ) -> JsonifySession:
         """Create a new in-memory session."""
 
@@ -48,6 +50,8 @@ class SessionService:
             workspace=SessionWorkspace(
                 selected_tab=selected_tab,
                 jsonpath_query=jsonpath_query,
+                bookmarks=list(bookmarks or []),
+                annotations=dict(annotations or {}),
             ),
             created_at=now,
             updated_at=now,
@@ -63,9 +67,7 @@ class SessionService:
         path = Path(file_path)
 
         if path.suffix.lower() != self.FILE_EXTENSION:
-            path = path.with_suffix(
-                self.FILE_EXTENSION
-            )
+            path = path.with_suffix(self.FILE_EXTENSION)
 
         session.updated_at = self._utc_now()
 
@@ -85,9 +87,7 @@ class SessionService:
             )
 
         except OSError as error:
-            raise SessionError(
-                f"Unable to save session: {error}"
-            ) from error
+            raise SessionError(f"Unable to save session: {error}") from error
 
         return path
 
@@ -100,33 +100,21 @@ class SessionService:
         path = Path(file_path)
 
         try:
-            text = path.read_text(
-                encoding="utf-8"
-            )
+            text = path.read_text(encoding="utf-8")
         except OSError as error:
-            raise SessionError(
-                f"Unable to open session: {error}"
-            ) from error
+            raise SessionError(f"Unable to open session: {error}") from error
 
         try:
             data = json.loads(text)
         except json.JSONDecodeError as error:
-            raise SessionError(
-                "The selected file is not valid JSON."
-            ) from error
+            raise SessionError("The selected file is not valid JSON.") from error
 
         if not isinstance(data, dict):
-            raise SessionError(
-                "Invalid Jsonify session file."
-            )
+            raise SessionError("Invalid Jsonify session file.")
 
-        self._validate_session_data(
-            data
-        )
+        self._validate_session_data(data)
 
-        return JsonifySession.from_dict(
-            data
-        )
+        return JsonifySession.from_dict(data)
 
     @staticmethod
     def _validate_session_data(
@@ -134,33 +122,19 @@ class SessionService:
     ) -> None:
         """Validate session metadata."""
 
-        if (
-            data.get("format")
-            != SESSION_FORMAT
-        ):
-            raise SessionError(
-                "This file is not a Jsonify session."
-            )
+        if data.get("format") != SESSION_FORMAT:
+            raise SessionError("This file is not a Jsonify session.")
 
         version = data.get("version")
 
         if version != SESSION_VERSION:
-            raise SessionError(
-                (
-                    "Unsupported Jsonify session "
-                    f"version: {version}"
-                )
-            )
+            raise SessionError(f"Unsupported Jsonify session version: {version}")
 
         if "payload" not in data:
-            raise SessionError(
-                "The session does not contain a JSON payload."
-            )
+            raise SessionError("The session does not contain a JSON payload.")
 
     @staticmethod
     def _utc_now() -> str:
         """Return current UTC time."""
 
-        return datetime.now(
-            timezone.utc
-        ).isoformat()
+        return datetime.now(UTC).isoformat()

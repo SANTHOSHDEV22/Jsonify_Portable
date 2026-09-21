@@ -1,56 +1,44 @@
 # -*- mode: python ; coding: utf-8 -*-
+#
+# Jsonify - PyInstaller build configuration.
+#
+#   python scripts/build.py          (recommended - see that file for options)
+#   pyinstaller Jsonify.spec         (direct)
+#
+# Produces dist/Jsonify/ containing:
+#   Jsonify.exe       the desktop app (no console window)
+#   jsonify-cli.exe   the command-line interface (console)
 
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-
-# ============================================================
-# Jsonify - PyInstaller Build Configuration
-# ============================================================
 
 project_root = Path(SPECPATH)
 src_dir = project_root / "src"
 
 
 # ------------------------------------------------------------
-# PySide6 WebEngine
+# Hidden imports
+#
+# QtWebEngine powers the graph view; every jsonify submodule is
+# listed explicitly so nothing imported lazily is missed.
 # ------------------------------------------------------------
 
 hiddenimports = collect_submodules("PySide6.QtWebEngineWidgets")
-
-datas = collect_data_files(
-    "PySide6",
-    include_py_files=False,
-)
+hiddenimports += collect_submodules("jsonify")
 
 
 # ------------------------------------------------------------
-# Jsonify static resources
+# Data files
 #
-# Include:
-#   src/jsonify/resources/d3.min.js
-#
-# Inside the packaged application it will remain available as:
-#   jsonify/resources/d3.min.js
+#   * PySide6 / Qt resources
+#   * jsonify/resources: d3.min.js, jsonify.png, ...
 # ------------------------------------------------------------
 
-datas += [
-    (
-        str(
-            src_dir
-            / "jsonify"
-            / "resources"
-            / "license_public.pem"
-        ),
-        "jsonify/resources",
-    ),
-]
+datas = collect_data_files("PySide6", include_py_files=False)
 
+datas += collect_data_files("jsonify.resources", include_py_files=False)
 
-# ------------------------------------------------------------
-# Analysis
-# ------------------------------------------------------------
 
 a = Analysis(
     [str(src_dir / "jsonify" / "__main__.py")],
@@ -61,24 +49,19 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["tkinter", "pytest", "mypy", "ruff"],
     noarchive=False,
     optimize=0,
 )
-
-
-# ------------------------------------------------------------
-# Python module archive
-# ------------------------------------------------------------
 
 pyz = PYZ(a.pure)
 
 
 # ------------------------------------------------------------
-# Executable
+# Executables (one shared analysis, two entry points)
 # ------------------------------------------------------------
 
-exe = EXE(
+gui_exe = EXE(
     pyz,
     a.scripts,
     [],
@@ -96,13 +79,32 @@ exe = EXE(
     entitlements_file=None,
 )
 
+cli_exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="jsonify-cli",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
 
 # ------------------------------------------------------------
 # Application distribution folder
 # ------------------------------------------------------------
 
 coll = COLLECT(
-    exe,
+    gui_exe,
+    cli_exe,
     a.binaries,
     a.datas,
     strip=False,

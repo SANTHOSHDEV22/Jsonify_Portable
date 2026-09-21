@@ -28,11 +28,7 @@ def test_export_json(
 
     assert result.exists()
 
-    loaded = json.loads(
-        result.read_text(
-            encoding="utf-8"
-        )
-    )
+    loaded = json.loads(result.read_text(encoding="utf-8"))
 
     assert loaded == payload
 
@@ -74,11 +70,7 @@ def test_export_nested_json(
         tmp_path / "users.json",
     )
 
-    loaded = json.loads(
-        result.read_text(
-            encoding="utf-8"
-        )
-    )
+    loaded = json.loads(result.read_text(encoding="utf-8"))
 
     assert loaded == payload
 
@@ -97,9 +89,7 @@ def test_unicode_preserved(
         tmp_path / "unicode.json",
     )
 
-    text = result.read_text(
-        encoding="utf-8"
-    )
+    text = result.read_text(encoding="utf-8")
 
     assert "வணக்கம்" in text
 
@@ -117,12 +107,7 @@ def test_export_text(
 
     assert result.exists()
 
-    assert (
-        result.read_text(
-            encoding="utf-8"
-        )
-        == "<svg></svg>"
-    )
+    assert result.read_text(encoding="utf-8") == "<svg></svg>"
 
 
 def test_text_extension_added(
@@ -149,12 +134,7 @@ def test_json_null(
         tmp_path / "null.json",
     )
 
-    assert (
-        result.read_text(
-            encoding="utf-8"
-        )
-        == "null"
-    )
+    assert result.read_text(encoding="utf-8") == "null"
 
 
 def test_json_array(
@@ -173,10 +153,6 @@ def test_json_array(
         tmp_path / "array.json",
     )
 
-    loaded = json.loads(
-        result.read_text(
-            encoding="utf-8"
-        )
-    )
+    loaded = json.loads(result.read_text(encoding="utf-8"))
 
     assert loaded == payload

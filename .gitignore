@@ -187,30 +187,11 @@ logs/
 
 
 # ------------------------------------------------------------
-# Licensing - PRIVATE / SECRET
-# ------------------------------------------------------------
-#
-# NEVER commit:
-# - Private signing keys
-# - Generated customer licenses
-#
-# The Jsonify PUBLIC verification key is intentionally allowed
-# because it must be distributed with the application.
+# Secrets / keys
 # ------------------------------------------------------------
 
 *.key
-
-*.private.pem
-license_private.pem
-
-licenses/
-*.jsonify-license
-
-# Ignore PEM files by default.
 *.pem
-
-# Allow Jsonify's public verification key.
-!src/jsonify/resources/license_public.pem
 
 
 # ------------------------------------------------------------
@@ -287,20 +268,33 @@ exports/
 installer-output/
 
 
+# ------------------------------------------------------------
+# Jsonify runtime data (never commit)
+#
+# Portable mode keeps settings, history, API workspaces and crash
+# recovery snapshots in a "data" folder next to the app; a
+# portable.flag file in the project root switches that on.
+# ------------------------------------------------------------
+
+/data/
+/portable.flag
+.jsonify/
+recovery.json
+api_workspace.json
+.venv_verify/
+
+
 # ============================================================
 # IMPORTANT FILES THAT SHOULD REMAIN TRACKED
 # ============================================================
 #
 # pyproject.toml
-# requirements.txt
+# requirements.txt, requirements-dev.txt, requirements-build.txt
 # Jsonify.spec
 # README.md
+# run_dev.cmd, run_prod.cmd, build_prod.cmd, run_dev.sh, scripts/build.py
 #
 # src/jsonify/resources/d3.min.js
 # src/jsonify/resources/jsonify.png
-# src/jsonify/resources/license_public.pem
-#
-# tools/generate_license_keys.py
-# tools/issue_license.py
 #
 # ============================================================

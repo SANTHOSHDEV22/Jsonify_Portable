@@ -2,71 +2,71 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence
+from PySide6.QtCore import QThread, QTimer, QUrl, Signal
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QComboBox,
     QFileDialog,
-    QHBoxLayout,
-    QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
-    QSplitter,
+    QStackedWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from jsonify.core.licensing import Feature
-from jsonify.core.models import JSONValue
-from jsonify.core.session import JsonifySession
-
-from jsonify.services import (
-    JsonService,
-)
+from jsonify.core.app_paths import data_dir, is_portable
+from jsonify.core.plugins import get_registry
+from jsonify.services import JsonService, SessionService
 from jsonify.services.large_json_service import LargeJsonService
-from jsonify.services.license_factory import create_license_service
-from jsonify.services.license_service import LicenseError
-from jsonify.services.license_storage import LicenseStorage
-from jsonify.services.session_service import SessionError, SessionService
-
+from jsonify.services.update_service import UpdateCheckError, UpdateInfo, UpdateService
+from jsonify.services.workspace_state_service import WorkspaceStateService
 from jsonify.ui.constants import (
     APP_NAME,
     APP_VERSION,
-    DARK_STYLESHEET,
     DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH,
-    FILTERED_VIEW_PLACEHOLDER,
-    LEVEL_PLACEHOLDER,
-    LIGHT_STYLESHEET,
-    MESSAGE_INVALID_JSON_TITLE,
-    MESSAGE_NO_JSON,
-    MESSAGE_NO_JSON_TITLE,
-    MESSAGE_NOTHING_TO_LOAD,
-    MESSAGE_NOTHING_TO_LOAD_TITLE,
-    MONOSPACE_FONT,
     WINDOW_TITLE,
 )
-
-from jsonify.ui.widgets.advanced_graph_view import AdvancedGraphView
-from jsonify.ui.widgets.api_view import ApiView
-from jsonify.ui.widgets.diff_view import DiffView
-from jsonify.ui.widgets.export_view import ExportView
-from jsonify.ui.widgets.hierarchy_view import (
-    build_hierarchy_text,
-    build_path_filtered_hierarchy_text,
-    keys_at_path,
+from jsonify.ui.theme import (
+    SYSTEM_THEME_ID,
+    build_stylesheet,
+    get_theme,
+    list_themes,
+    resolve_system_theme,
 )
-from jsonify.ui.widgets.jsonpath_view import JsonPathView
-from jsonify.ui.widgets.lazy_tree_view import LazyJsonTreeView
-from jsonify.ui.widgets.license_view import LicenseView
-from jsonify.ui.widgets.masking_view import MaskingView
-from jsonify.ui.widgets.schema_view import SchemaView
+from jsonify.ui.widgets.batch_dialog import BatchDialog
+from jsonify.ui.widgets.command_palette import CommandPalette
+from jsonify.ui.widgets.document_tab import DocumentTab
+from jsonify.ui.widgets.welcome_view import WelcomeView
+
+# How often the open-tabs recovery snapshot is refreshed, in milliseconds.
+_AUTOSAVE_INTERVAL_MS = 30_000
+
+_JSON_FILE_FILTER = "JSON Files (*.json *.jsonl *.ndjson);;All Files (*)"
+_SESSION_FILE_FILTER = "Jsonify Session (*.jsonify)"
+_THEME_SETTING_KEY = "theme"
+_UPDATE_SETTING_KEY = "check_updates"
+
+
+class _UpdateWorker(QThread):
+    """Runs the (network) update check off the UI thread."""
+
+    finished_with = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, current_version: str, parent=None) -> None:
+        super().__init__(parent)
+        self._current_version = current_version
+
+    def run(self) -> None:
+        try:
+            self.finished_with.emit(UpdateService().check(self._current_version))
+        except UpdateCheckError as error:
+            self.failed.emit(str(error))
 
 
 class MainWindow(QMainWindow):
@@ -81,72 +81,48 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # -------------------------------------------------------------
-        # Core services
+        # Shared services (stateless enough to share across documents)
         # -------------------------------------------------------------
 
-        self._json_service = (
-            json_service
-            if json_service is not None
-            else JsonService()
-        )
-
+        self._json_service_override = json_service
         self._large_json_service = LargeJsonService()
-
         self._session_service = SessionService()
+        self._workspace_state = WorkspaceStateService()
 
-        self._license_service = create_license_service()
-
-        self._license_storage = LicenseStorage()
-
-        # -------------------------------------------------------------
-        # Current JSON state
-        # -------------------------------------------------------------
-
-        self._payload: JSONValue | None = None
-
-        # Important:
-        # JSON "null" becomes Python None.
-        # Therefore _payload is None cannot be used to determine whether
-        # JSON has actually been loaded.
-        self._has_payload = False
-
-        self._document_count = 0
-
-        # -------------------------------------------------------------
-        # Saved-session state
-        # -------------------------------------------------------------
-
-        self._current_session: JsonifySession | None = None
-
-        self._current_session_path: Path | None = None
-
-        # -------------------------------------------------------------
-        # Filter state
-        # -------------------------------------------------------------
-
-        self._level_combos: list[QComboBox] = []
+        # Plugins are loaded before any document exists so every view sees them.
+        get_registry().load(data_dir() / "plugins")
+        self._update_worker: _UpdateWorker | None = None
+        self._update_check_is_manual = False
 
         # -------------------------------------------------------------
         # Theme state
         # -------------------------------------------------------------
 
-        self._dark_mode: bool = True
+        self._theme_id: str = self._workspace_state.get_setting(_THEME_SETTING_KEY, SYSTEM_THEME_ID)
 
         # -------------------------------------------------------------
         # Setup
         # -------------------------------------------------------------
 
         self._setup_window()
-
-        self._load_saved_license()
-
         self._setup_ui()
-
         self._setup_menu()
+        self._apply_theme(self._theme_id, persist=False)
 
-        self._setup_licensed_features()
+        self._tab_cycle_next = QShortcut(QKeySequence("Ctrl+Tab"), self)
+        self._tab_cycle_next.activated.connect(self._cycle_document_tab_next)
 
-        self._refresh_license_access()
+        self._tab_cycle_prev = QShortcut(QKeySequence("Ctrl+Shift+Tab"), self)
+        self._tab_cycle_prev.activated.connect(self._cycle_document_tab_prev)
+
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setInterval(_AUTOSAVE_INTERVAL_MS)
+        self._autosave_timer.timeout.connect(self._write_recovery_snapshot)
+        self._autosave_timer.start()
+
+        QTimer.singleShot(0, self._offer_crash_recovery)
+        if self._workspace_state.get_setting(_UPDATE_SETTING_KEY, False):
+            QTimer.singleShot(2000, lambda: self._check_for_updates(manual=False))
 
     # =================================================================
     # Window setup
@@ -156,19 +132,8 @@ class MainWindow(QMainWindow):
         """Configure the main application window."""
 
         self.setWindowTitle(WINDOW_TITLE)
-
-        self.resize(
-            DEFAULT_WINDOW_WIDTH,
-            DEFAULT_WINDOW_HEIGHT,
-        )
-
-        self.setStyleSheet(
-            DARK_STYLESHEET
-        )
-
-        self.statusBar().showMessage(
-            "Ready"
-        )
+        self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+        self.statusBar().showMessage("Ready")
 
     # =================================================================
     # Main UI
@@ -178,30 +143,38 @@ class MainWindow(QMainWindow):
         """Build the main user interface."""
 
         central_widget = QWidget()
+        self.setCentralWidget(central_widget)
 
-        self.setCentralWidget(
-            central_widget
-        )
+        root_layout = QVBoxLayout(central_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        root_layout = QVBoxLayout(
-            central_widget
-        )
+        self._stack = QStackedWidget()
 
-        root_layout.setContentsMargins(
-            0,
-            0,
-            0,
-            0,
-        )
+        self._welcome = WelcomeView(self._workspace_state.get_recent_files())
+        self._welcome.new_document_requested.connect(self.new_document)
+        self._welcome.open_file_requested.connect(self._open_file_dialog)
+        self._welcome.open_session_requested.connect(self._open_session)
+        self._welcome.recent_file_selected.connect(self._open_recent_file)
 
-        root_layout.setSpacing(
-            0
-        )
+        self._doc_tabs = QTabWidget()
+        self._doc_tabs.setTabsClosable(True)
+        self._doc_tabs.setMovable(True)
+        self._doc_tabs.setDocumentMode(True)
+        self._doc_tabs.tabCloseRequested.connect(self._close_tab)
+        self._doc_tabs.currentChanged.connect(self._on_current_tab_changed)
 
-        root_layout.addWidget(
-            self._create_split_view(),
-            stretch=1,
-        )
+        new_tab_button = QPushButton("+ New")
+        new_tab_button.setToolTip("New document (Ctrl+N)")
+        new_tab_button.clicked.connect(self.new_document)
+        self._doc_tabs.setCornerWidget(new_tab_button)
+
+        self._stack.addWidget(self._welcome)
+        self._stack.addWidget(self._doc_tabs)
+
+        root_layout.addWidget(self._stack, stretch=1)
+
+        self._update_stack_visibility()
 
     # =================================================================
     # Menu
@@ -216,256 +189,187 @@ class MainWindow(QMainWindow):
         # File menu
         # -------------------------------------------------------------
 
-        file_menu = menu_bar.addMenu(
-            "&File"
-        )
+        file_menu = menu_bar.addMenu("&File")
 
-        load_action = QAction(
-            "Load JSON",
-            self,
-        )
+        new_action = QAction("New Document", self)
+        new_action.setShortcut(QKeySequence.StandardKey.New)
+        new_action.triggered.connect(self.new_document)
+        file_menu.addAction(new_action)
 
-        load_action.setShortcut(
-            QKeySequence.StandardKey.Open
-        )
+        open_file_action = QAction("Open File...", self)
+        open_file_action.setShortcut(QKeySequence.StandardKey.Open)
+        open_file_action.triggered.connect(self._open_file_dialog)
+        file_menu.addAction(open_file_action)
 
-        load_action.triggered.connect(
-            self._load_json
-        )
+        load_action = QAction("Load JSON From Editor", self)
+        load_action.setShortcut(QKeySequence("Ctrl+Return"))
+        load_action.triggered.connect(self._load_json)
+        file_menu.addAction(load_action)
 
-        file_menu.addAction(
-            load_action
-        )
+        palette_action = QAction("Command Palette...", self)
+        palette_action.setShortcut(QKeySequence("Ctrl+Shift+P"))
+        palette_action.triggered.connect(self._show_command_palette)
+        file_menu.addAction(palette_action)
 
-        file_menu.addSeparator()
-
-        self._open_session_action = QAction(
-            "Open Session...",
-            self,
-        )
-
-        self._open_session_action.setShortcut(
-            QKeySequence(
-                "Ctrl+Shift+O"
-            )
-        )
-
-        self._open_session_action.triggered.connect(
-            self._open_session
-        )
-
-        file_menu.addAction(
-            self._open_session_action
-        )
-
-        self._save_session_action = QAction(
-            "Save Session",
-            self,
-        )
-
-        self._save_session_action.setShortcut(
-            QKeySequence(
-                "Ctrl+Shift+S"
-            )
-        )
-
-        self._save_session_action.triggered.connect(
-            self._save_session
-        )
-
-        file_menu.addAction(
-            self._save_session_action
-        )
-
-        self._save_session_as_action = QAction(
-            "Save Session As...",
-            self,
-        )
-
-        self._save_session_as_action.triggered.connect(
-            self._save_session_as
-        )
-
-        file_menu.addAction(
-            self._save_session_as_action
-        )
+        self._recent_menu = QMenu("Open Recent", self)
+        file_menu.addMenu(self._recent_menu)
+        self._refresh_recent_menu()
 
         file_menu.addSeparator()
 
-        exit_action = QAction(
-            "Exit",
-            self,
-        )
+        self._open_session_action = QAction("Open Session...", self)
+        self._open_session_action.setShortcut(QKeySequence("Ctrl+Shift+O"))
+        self._open_session_action.triggered.connect(self._open_session)
+        file_menu.addAction(self._open_session_action)
 
-        exit_action.setShortcut(
-            QKeySequence.StandardKey.Quit
-        )
+        self._save_session_action = QAction("Save Session", self)
+        self._save_session_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        self._save_session_action.triggered.connect(self._save_session)
+        file_menu.addAction(self._save_session_action)
 
-        exit_action.triggered.connect(
-            self.close
-        )
+        self._save_session_as_action = QAction("Save Session As...", self)
+        self._save_session_as_action.triggered.connect(self._save_session_as)
+        file_menu.addAction(self._save_session_as_action)
 
-        file_menu.addAction(
-            exit_action
-        )
+        batch_action = QAction("Batch Process...", self)
+        batch_action.triggered.connect(self._show_batch_dialog)
+        file_menu.addAction(batch_action)
+
+        file_menu.addSeparator()
+
+        close_tab_action = QAction("Close Document", self)
+        close_tab_action.setShortcut(QKeySequence.StandardKey.Close)
+        close_tab_action.triggered.connect(self._close_current_tab)
+        file_menu.addAction(close_tab_action)
+
+        exit_action = QAction("Exit", self)
+        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
 
         # -------------------------------------------------------------
         # Settings menu
         # -------------------------------------------------------------
 
-        settings_menu = menu_bar.addMenu(
-            "&Settings"
-        )
+        settings_menu = menu_bar.addMenu("&Settings")
+        theme_menu = settings_menu.addMenu("Theme")
 
-        theme_group = QActionGroup(
-            self
-        )
+        self._theme_group = QActionGroup(self)
+        self._theme_group.setExclusive(True)
+        self._theme_actions: dict[str, QAction] = {}
 
-        theme_group.setExclusive(
-            True
-        )
+        system_action = QAction("Follow System", self)
+        system_action.setCheckable(True)
+        system_action.triggered.connect(lambda: self._apply_theme(SYSTEM_THEME_ID))
+        self._theme_group.addAction(system_action)
+        theme_menu.addAction(system_action)
+        self._theme_actions[SYSTEM_THEME_ID] = system_action
 
-        self._dark_mode_action = QAction(
-            "Dark Mode",
-            self,
-        )
+        theme_menu.addSeparator()
 
-        self._dark_mode_action.setCheckable(
-            True
-        )
+        for theme in list_themes():
+            theme_action = QAction(theme.name, self)
+            theme_action.setCheckable(True)
+            theme_action.triggered.connect(
+                lambda _checked=False, theme_id=theme.id: self._apply_theme(theme_id)
+            )
+            self._theme_group.addAction(theme_action)
+            theme_menu.addAction(theme_action)
+            self._theme_actions[theme.id] = theme_action
 
-        self._dark_mode_action.setChecked(
-            self._dark_mode
-        )
+        settings_menu.addSeparator()
 
-        self._dark_mode_action.triggered.connect(
-            lambda: self._set_theme(True)
+        self._update_check_action = QAction("Check for Updates on Startup", self)
+        self._update_check_action.setCheckable(True)
+        self._update_check_action.setChecked(
+            bool(self._workspace_state.get_setting(_UPDATE_SETTING_KEY, False))
         )
-
-        theme_group.addAction(
-            self._dark_mode_action
+        self._update_check_action.toggled.connect(
+            lambda checked: self._workspace_state.set_setting(_UPDATE_SETTING_KEY, checked)
         )
-
-        settings_menu.addAction(
-            self._dark_mode_action
-        )
-
-        self._light_mode_action = QAction(
-            "Light Mode",
-            self,
-        )
-
-        self._light_mode_action.setCheckable(
-            True
-        )
-
-        self._light_mode_action.setChecked(
-            not self._dark_mode
-        )
-
-        self._light_mode_action.triggered.connect(
-            lambda: self._set_theme(False)
-        )
-
-        theme_group.addAction(
-            self._light_mode_action
-        )
-
-        settings_menu.addAction(
-            self._light_mode_action
-        )
+        settings_menu.addAction(self._update_check_action)
 
         # -------------------------------------------------------------
         # About menu
         # -------------------------------------------------------------
 
-        about_menu = menu_bar.addMenu(
-            "&About"
-        )
+        about_menu = menu_bar.addMenu("&About")
 
-        manage_license_action = QAction(
-            "License",
-            self,
-        )
+        version_action = QAction("Version", self)
+        version_action.triggered.connect(self._show_version_dialog)
+        about_menu.addAction(version_action)
 
-        manage_license_action.triggered.connect(
-            self._show_license_tab
-        )
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self._show_about_dialog)
+        about_menu.addAction(about_action)
 
-        about_menu.addAction(
-            manage_license_action
-        )
+        update_action = QAction("Check for Updates...", self)
+        update_action.triggered.connect(lambda: self._check_for_updates(manual=True))
+        about_menu.addAction(update_action)
 
-        about_menu.addSeparator()
+        plugins_action = QAction("Loaded Plugins", self)
+        plugins_action.triggered.connect(self._show_plugins_dialog)
+        about_menu.addAction(plugins_action)
 
-        version_action = QAction(
-            "Version",
-            self,
-        )
+    def _apply_theme(self, theme_id: str, *, persist: bool = True) -> None:
+        """Apply a theme by id (or ``SYSTEM_THEME_ID`` to follow the OS).
 
-        version_action.triggered.connect(
-            self._show_version_dialog
-        )
-
-        about_menu.addAction(
-            version_action
-        )
-
-        about_action = QAction(
-            "About",
-            self,
-        )
-
-        about_action.triggered.connect(
-            self._show_about_dialog
-        )
-
-        about_menu.addAction(
-            about_action
-        )
-
-    def _set_theme(
-        self,
-        dark: bool,
-    ) -> None:
-        """Apply dark or light mode.
-
-        Only re-styles the Qt chrome (window, panes, tabs, buttons,
-        the tree/hierarchy/filtered text views) — the Graph tab's
-        embedded D3 view has its own separate dark background baked
-        into the HTML it renders and isn't affected by this setting.
+        Only re-styles the Qt chrome (window, panes, tabs, buttons, the
+        tree/hierarchy/filtered text views) — the Graph tab's embedded D3
+        view has its own separate dark background baked into the HTML it
+        renders and isn't affected by this setting.
         """
 
-        self._dark_mode = dark
+        self._theme_id = theme_id
+        resolved = resolve_system_theme() if theme_id == SYSTEM_THEME_ID else get_theme(theme_id)
 
-        self.setStyleSheet(
-            DARK_STYLESHEET
-            if dark
-            else LIGHT_STYLESHEET
+        self.setStyleSheet(build_stylesheet(resolved))
+
+        action = self._theme_actions.get(theme_id)
+        if action is not None:
+            action.setChecked(True)
+
+        for index in range(self._doc_tabs.count()):
+            document = self._doc_tabs.widget(index)
+            if isinstance(document, DocumentTab):
+                document.apply_theme(resolved.colors)
+
+        if persist:
+            self._workspace_state.set_setting(_THEME_SETTING_KEY, theme_id)
+
+    def _current_theme_colors(self) -> dict[str, str]:
+        resolved = (
+            resolve_system_theme()
+            if self._theme_id == SYSTEM_THEME_ID
+            else get_theme(self._theme_id)
         )
+        return resolved.colors
 
-        self._dark_mode_action.setChecked(
-            dark
-        )
+    def _show_command_palette(self) -> None:
+        actions = [action for action in self.findChildren(QAction) if action.text().strip()]
+        palette = CommandPalette(actions, self)
+        palette.exec()
 
-        self._light_mode_action.setChecked(
-            not dark
-        )
+    def _cycle_document_tab_next(self) -> None:
+        self._cycle_document_tab(1)
 
-    def _show_version_dialog(
-        self,
-    ) -> None:
+    def _cycle_document_tab_prev(self) -> None:
+        self._cycle_document_tab(-1)
+
+    def _cycle_document_tab(self, direction: int) -> None:
+        count = self._doc_tabs.count()
+        if count == 0:
+            return
+
+        next_index = (self._doc_tabs.currentIndex() + direction) % count
+        self._doc_tabs.setCurrentIndex(next_index)
+
+    def _show_version_dialog(self) -> None:
         """Show the application version."""
 
-        QMessageBox.information(
-            self,
-            "Version",
-            f"{APP_NAME} version {APP_VERSION}",
-        )
+        QMessageBox.information(self, "Version", f"{APP_NAME} version {APP_VERSION}")
 
-    def _show_about_dialog(
-        self,
-    ) -> None:
+    def _show_about_dialog(self) -> None:
         """Show application information."""
 
         QMessageBox.information(
@@ -473,1499 +377,288 @@ class MainWindow(QMainWindow):
             "About",
             (
                 f"{APP_NAME} version {APP_VERSION}\n\n"
-                "A JSON payload viewer and editor with tree, "
-                "hierarchy, filtered, and graph views."
+                "A JSON payload viewer and editor with tree, hierarchy, "
+                "filtered, and graph views.\n\n"
+                f"Mode: {'Portable' if is_portable() else 'Installed'}\n"
+                f"Data folder: {data_dir()}"
             ),
         )
 
     # =================================================================
-    # Split view
+    # Document management
     # =================================================================
 
-    def _create_split_view(
-        self,
-    ) -> QSplitter:
-        """Create editor/viewer split layout."""
+    def new_document(self) -> DocumentTab:
+        """Open a new, empty document tab and make it current."""
 
-        splitter = QSplitter(
-            Qt.Orientation.Horizontal
+        document = DocumentTab(
+            json_service=self._json_service_override,
+            large_json_service=self._large_json_service,
+            session_service=self._session_service,
         )
 
-        splitter.addWidget(
-            self._create_editor_panel()
+        document.title_changed.connect(
+            lambda title, doc=document: self._on_document_title_changed(doc, title)
         )
+        document.status_changed.connect(self.statusBar().showMessage)
+        document.apply_theme(self._current_theme_colors())
 
-        splitter.addWidget(
-            self._create_viewer_panel()
-        )
+        index = self._doc_tabs.addTab(document, document.display_name())
+        self._doc_tabs.setCurrentIndex(index)
+        self._update_stack_visibility()
 
-        splitter.setStretchFactor(
-            0,
-            1,
-        )
+        return document
 
-        splitter.setStretchFactor(
-            1,
-            1,
-        )
+    def _current_document(self) -> DocumentTab | None:
+        widget = self._doc_tabs.currentWidget()
+        return widget if isinstance(widget, DocumentTab) else None
 
-        splitter.setSizes(
-            [
-                650,
-                850,
-            ]
-        )
+    def _current_or_new_document(self, *, reuse_if_empty: bool = True) -> DocumentTab:
+        document = self._current_document()
 
-        return splitter
+        if document is not None and reuse_if_empty and not document.has_content():
+            return document
 
-    # =================================================================
-    # Editor
-    # =================================================================
+        if document is not None and not reuse_if_empty:
+            return document
 
-    def _create_editor_panel(
-        self,
-    ) -> QWidget:
-        """Create JSON editor panel."""
+        return self.new_document()
 
-        panel = QWidget()
+    def _on_document_title_changed(self, document: DocumentTab, title: str) -> None:
+        index = self._doc_tabs.indexOf(document)
+        if index >= 0:
+            self._doc_tabs.setTabText(index, title)
 
-        layout = QVBoxLayout(
-            panel
-        )
+    def _close_tab(self, index: int) -> None:
+        widget = self._doc_tabs.widget(index)
+        self._doc_tabs.removeTab(index)
 
-        layout.setContentsMargins(
-            6,
-            6,
-            6,
-            6,
-        )
+        if widget is not None:
+            widget.deleteLater()
 
-        header = QHBoxLayout()
+        self._update_stack_visibility()
 
-        header.addWidget(
-            QLabel("JSON Editor")
-        )
+    def _close_current_tab(self) -> None:
+        index = self._doc_tabs.currentIndex()
+        if index >= 0:
+            self._close_tab(index)
 
-        header.addStretch(
-            1
-        )
+    def _on_current_tab_changed(self, index: int) -> None:
+        document = self._doc_tabs.widget(index)
+        if isinstance(document, DocumentTab):
+            self.statusBar().showMessage(document.display_name())
 
-        self._load_button = QPushButton(
-            "▶ LOAD JSON"
-        )
-
-        self._load_button.clicked.connect(
-            self._load_json
-        )
-
-        header.addWidget(
-            self._load_button
-        )
-
-        layout.addLayout(
-            header
-        )
-
-        self._editor = QPlainTextEdit()
-
-        self._editor.setTabStopDistance(
-            20
-        )
-
-        font = self._editor.font()
-
-        font.setFamily(
-            MONOSPACE_FONT
-        )
-
-        self._editor.setFont(
-            font
-        )
-
-        layout.addWidget(
-            self._editor
-        )
-
-        return panel
+    def _update_stack_visibility(self) -> None:
+        if self._doc_tabs.count() == 0:
+            self._welcome.set_recent_files(self._workspace_state.get_recent_files())
+            self._stack.setCurrentWidget(self._welcome)
+        else:
+            self._stack.setCurrentWidget(self._doc_tabs)
 
     # =================================================================
-    # Viewer
-    # =================================================================
-
-    def _create_viewer_panel(
-        self,
-    ) -> QWidget:
-        """Create visualization panel."""
-
-        panel = QWidget()
-
-        layout = QVBoxLayout(
-            panel
-        )
-
-        layout.setContentsMargins(
-            6,
-            6,
-            6,
-            6,
-        )
-
-        layout.addWidget(
-            QLabel("Viewer")
-        )
-
-        self._view_tabs = QTabWidget()
-
-        # -------------------------------------------------------------
-        # Core/free views
-        # -------------------------------------------------------------
-
-        self._create_tree_tab()
-
-        self._create_hierarchy_tab()
-
-        self._filtered_view_container = (
-            self._create_filtered_tab()
-        )
-
-        self._view_tabs.addTab(
-            self._filtered_view_container,
-            "Filtered View",
-        )
-
-        # -------------------------------------------------------------
-        # Advanced graph
-        # -------------------------------------------------------------
-
-        self._graph_view = (
-            AdvancedGraphView()
-        )
-
-        self._view_tabs.addTab(
-            self._graph_view,
-            "Graph",
-        )
-
-        # -------------------------------------------------------------
-        # JSON Diff
-        # -------------------------------------------------------------
-
-        self._diff_view = DiffView()
-
-        self._view_tabs.addTab(
-            self._diff_view,
-            "JSON Diff",
-        )
-
-        # -------------------------------------------------------------
-        # JSONPath
-        # -------------------------------------------------------------
-
-        self._jsonpath_view = (
-            JsonPathView()
-        )
-
-        self._view_tabs.addTab(
-            self._jsonpath_view,
-            "JSONPath",
-        )
-
-        # -------------------------------------------------------------
-        # Schema Validation
-        # -------------------------------------------------------------
-
-        self._schema_view = (
-            SchemaView()
-        )
-
-        self._view_tabs.addTab(
-            self._schema_view,
-            "Schema",
-        )
-
-        # -------------------------------------------------------------
-        # Sensitive Data Masking
-        # -------------------------------------------------------------
-
-        self._masking_view = (
-            MaskingView()
-        )
-
-        self._view_tabs.addTab(
-            self._masking_view,
-            "Data Masking",
-        )
-
-        # -------------------------------------------------------------
-        # API Response Viewer
-        # -------------------------------------------------------------
-
-        self._api_view = ApiView()
-
-        self._view_tabs.addTab(
-            self._api_view,
-            "API Viewer",
-        )
-
-        # -------------------------------------------------------------
-        # Export
-        # -------------------------------------------------------------
-
-        self._export_view = (
-            ExportView()
-        )
-
-        self._view_tabs.addTab(
-            self._export_view,
-            "Export",
-        )
-
-        # -------------------------------------------------------------
-        # License
-        # -------------------------------------------------------------
-
-        self._license_view = LicenseView(
-            self._license_service
-        )
-
-        self._license_view.license_changed.connect(
-            self._refresh_license_access
-        )
-
-        self._view_tabs.addTab(
-            self._license_view,
-            "License",
-        )
-
-        layout.addWidget(
-            self._view_tabs
-        )
-
-        return panel
-
-    # =================================================================
-    # Tree View
-    # =================================================================
-
-    def _create_tree_tab(
-        self,
-    ) -> None:
-        """Create optimized lazy JSON tree."""
-
-        self._tree_view = (
-            LazyJsonTreeView()
-        )
-
-        self._view_tabs.addTab(
-            self._tree_view,
-            "Normal View",
-        )
-
-    # =================================================================
-    # Hierarchy View
-    # =================================================================
-
-    def _create_hierarchy_tab(
-        self,
-    ) -> None:
-        """Create text hierarchy view."""
-
-        self._hierarchy_view = (
-            QPlainTextEdit()
-        )
-
-        self._hierarchy_view.setReadOnly(
-            True
-        )
-
-        font = (
-            self._hierarchy_view.font()
-        )
-
-        font.setFamily(
-            MONOSPACE_FONT
-        )
-
-        self._hierarchy_view.setFont(
-            font
-        )
-
-        self._view_tabs.addTab(
-            self._hierarchy_view,
-            "Hierarchy View",
-        )
-
-    # =================================================================
-    # Filtered View
-    # =================================================================
-
-    def _create_filtered_tab(
-        self,
-    ) -> QWidget:
-        """Create hierarchical filtered JSON view."""
-
-        container = QWidget()
-
-        container_layout = QVBoxLayout(
-            container
-        )
-
-        container_layout.setContentsMargins(
-            0,
-            0,
-            0,
-            0,
-        )
-
-        container_layout.setSpacing(
-            4
-        )
-
-        levels_row = QWidget()
-
-        self._levels_layout = QHBoxLayout(
-            levels_row
-        )
-
-        self._levels_layout.setContentsMargins(
-            8,
-            8,
-            8,
-            0,
-        )
-
-        self._levels_layout.setSpacing(
-            6
-        )
-
-        self._levels_layout.addWidget(
-            QLabel("Drill into:")
-        )
-
-        self._show_filtered_button = (
-            QPushButton("Show")
-        )
-
-        self._show_filtered_button.clicked.connect(
-            self._show_filtered
-        )
-
-        self._levels_layout.addWidget(
-            self._show_filtered_button
-        )
-
-        self._levels_layout.addStretch(
-            1
-        )
-
-        container_layout.addWidget(
-            levels_row
-        )
-
-        self._filtered_view = (
-            QPlainTextEdit()
-        )
-
-        self._filtered_view.setReadOnly(
-            True
-        )
-
-        font = (
-            self._filtered_view.font()
-        )
-
-        font.setFamily(
-            MONOSPACE_FONT
-        )
-
-        self._filtered_view.setFont(
-            font
-        )
-
-        self._filtered_view.setPlainText(
-            FILTERED_VIEW_PLACEHOLDER
-        )
-
-        container_layout.addWidget(
-            self._filtered_view,
-            stretch=1,
-        )
-
-        return container
-
-    # =================================================================
-    # JSON Loading
+    # JSON loading
     # =================================================================
 
     def _load_json(self) -> None:
-        """Parse editor content and refresh all views."""
+        document = self._current_document()
+        if document is None:
+            document = self.new_document()
+        document.load_from_editor()
 
-        raw_text = (
-            self._editor
-            .toPlainText()
-            .strip()
-        )
+    def _open_file_dialog(self) -> None:
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open JSON File", "", _JSON_FILE_FILTER)
+        if file_name:
+            self._open_path(Path(file_name))
 
-        if not raw_text:
-            QMessageBox.warning(
-                self,
-                MESSAGE_NOTHING_TO_LOAD_TITLE,
-                MESSAGE_NOTHING_TO_LOAD,
-            )
+    def _open_path(self, path: Path) -> None:
+        document = self._current_or_new_document()
+        document.open_file(path)
+        self._workspace_state.add_recent_file(str(path))
+        self._refresh_recent_menu()
 
+    def _open_recent_file(self, path_str: str) -> None:
+        path = Path(path_str)
+
+        if not path.exists():
+            QMessageBox.warning(self, "File Not Found", f"This file no longer exists:\n\n{path}")
             return
 
-        try:
-            payload, document_count = (
-                self._json_service
-                .parse_multiple(
-                    raw_text
-                )
-            )
+        self._open_path(path)
 
-        except json.JSONDecodeError as exc:
-            QMessageBox.critical(
-                self,
-                MESSAGE_INVALID_JSON_TITLE,
-                (
-                    "Could not parse JSON:"
-                    f"\n\n{exc}"
-                ),
-            )
+    def _refresh_recent_menu(self) -> None:
+        self._recent_menu.clear()
+        recent_files = self._workspace_state.get_recent_files()
 
+        if not recent_files:
+            empty_action = QAction("(No recent files)", self)
+            empty_action.setEnabled(False)
+            self._recent_menu.addAction(empty_action)
             return
 
-        # Only update state after successful parsing.
-
-        self._payload = payload
-
-        self._has_payload = True
-
-        self._document_count = (
-            document_count
-        )
-
-        # Ordinary JSON load is no longer associated
-        # with the previously opened session.
-
-        self._current_session = None
-
-        self._current_session_path = None
-
-        self._refresh_all_views()
-
-    # =================================================================
-    # Refresh all views
-    # =================================================================
-
-    def _refresh_all_views(
-        self,
-    ) -> None:
-        """Refresh all JSON tools."""
-
-        if not self._has_payload:
-            return
-
-        payload = self._payload
-
-        # JSONValue includes None, so this is intentionally allowed.
-
-        self._refresh_tree_view(
-            payload
-        )
-
-        self._refresh_hierarchy_view(
-            payload
-        )
-
-        self._reset_filter_levels()
-
-        self._refresh_graph_view(
-            payload
-        )
-
-        self._refresh_jsonpath_view(
-            payload
-        )
-
-        self._refresh_schema_view(
-            payload
-        )
-
-        self._refresh_masking_view(
-            payload
-        )
-
-        self._refresh_export_view(
-            payload
-        )
-
-        self._refresh_payload_status(
-            payload
-        )
-
-    # =================================================================
-    # Tree refresh
-    # =================================================================
-
-    def _refresh_tree_view(
-        self,
-        payload: JSONValue,
-    ) -> None:
-        """Refresh lazy tree."""
-
-        self._tree_view.set_payload(
-            payload
-        )
-
-    # =================================================================
-    # Hierarchy refresh
-    # =================================================================
-
-    def _refresh_hierarchy_view(
-        self,
-        payload: JSONValue,
-    ) -> None:
-        """Refresh hierarchy visualization."""
-
-        size_info = (
-            self._large_json_service
-            .analyze(payload)
-        )
-
-        preview_limit = (
-            self._large_json_service
-            .settings
-            .hierarchy_preview_nodes
-        )
-
-        if (
-            size_info.total_nodes
-            > preview_limit
-        ):
-            message = (
-                "Large JSON detected.\n\n"
-                f"{size_info.total_nodes:,} nodes\n"
-                f"{size_info.containers:,} containers\n"
-                f"{size_info.primitives:,} primitive values\n"
-                f"Maximum depth: {size_info.max_depth}\n\n"
-                "The complete hierarchy is not "
-                "automatically generated to keep "
-                "Jsonify responsive.\n\n"
-                f"Hierarchy safety limit: "
-                f"{preview_limit:,} nodes."
-            )
-
-            self._hierarchy_view.setPlainText(
-                message
-            )
-
-            return
-
-        hierarchy = (
-            build_hierarchy_text(
-                payload
-            )
-        )
-
-        self._hierarchy_view.setPlainText(
-            hierarchy
-        )
-
-    # =================================================================
-    # Graph refresh
-    # =================================================================
-
-    def _refresh_graph_view(
-        self,
-        payload: JSONValue,
-    ) -> None:
-        """Refresh advanced graph."""
-
-        self._graph_view.set_payload(
-            payload
-        )
-
-    # =================================================================
-    # JSONPath refresh
-    # =================================================================
-
-    def _refresh_jsonpath_view(
-        self,
-        payload: JSONValue,
-    ) -> None:
-        """Refresh JSONPath payload."""
-
-        self._jsonpath_view.set_payload(
-            payload
-        )
-
-    # =================================================================
-    # Schema refresh
-    # =================================================================
-
-    def _refresh_schema_view(
-        self,
-        payload: JSONValue,
-    ) -> None:
-        """Refresh schema validation payload."""
-
-        self._schema_view.set_payload(
-            payload
-        )
-
-    # =================================================================
-    # Masking refresh
-    # =================================================================
-
-    def _refresh_masking_view(
-        self,
-        payload: JSONValue,
-    ) -> None:
-        """Refresh sensitive-data masking payload."""
-
-        self._masking_view.set_payload(
-            payload
-        )
-
-    # =================================================================
-    # Export refresh
-    # =================================================================
-
-    def _refresh_export_view(
-        self,
-        payload: JSONValue,
-    ) -> None:
-        """Refresh export source payload."""
-
-        if hasattr(
-            self._export_view,
-            "set_payload",
-        ):
-            self._export_view.set_payload(
-                payload
-            )
-
-        if hasattr(
-            self._export_view,
-            "set_graph_view",
-        ):
-            self._export_view.set_graph_view(
-                self._graph_view
-            )
-
-    # =================================================================
-    # Payload status / Large JSON information
-    # =================================================================
-
-    def _refresh_payload_status(
-        self,
-        payload: JSONValue,
-    ) -> None:
-        """Display JSON size information."""
-
-        size_info = (
-            self._large_json_service
-            .analyze(payload)
-        )
-
-        large_text = ""
-
-        if (
-            self._large_json_service
-            .should_use_lazy_tree(
-                size_info
-            )
-        ):
-            large_text = " | Large JSON"
-
-        status = (
-            f"{size_info.total_nodes:,} nodes"
-            f" | Depth {size_info.max_depth}"
-            f" | {self._document_count:,} document(s)"
-            f"{large_text}"
-        )
-
-        self.statusBar().showMessage(
-            f"JSON loaded | {status}"
-        )
-
-    # =================================================================
-    # Filter levels
-    # =================================================================
-
-    def _reset_filter_levels(
-        self,
-    ) -> None:
-        """Reset filtered-view dropdowns."""
-
-        for combo in (
-            self._level_combos
-        ):
-            self._levels_layout.removeWidget(
-                combo
-            )
-
-            combo.deleteLater()
-
-        self._level_combos.clear()
-
-        self._filtered_view.setPlainText(
-            FILTERED_VIEW_PLACEHOLDER
-        )
-
-        if not self._has_payload:
-            return
-
-        first_level_keys = keys_at_path(
-            self._payload,
-            [],
-        )
-
-        if first_level_keys:
-            self._add_level_combo(
-                first_level_keys
-            )
-
-    def _add_level_combo(
-        self,
-        keys: list[str],
-    ) -> None:
-        """Add hierarchy-level selector."""
-
-        combo = QComboBox()
-
-        combo.addItem(
-            LEVEL_PLACEHOLDER
-        )
-
-        combo.addItems(
-            keys
-        )
-
-        combo.currentIndexChanged.connect(
-            lambda _index, current=combo:
-            self._on_level_changed(
-                current
-            )
-        )
-
-        button_index = (
-            self._levels_layout
-            .indexOf(
-                self._show_filtered_button
-            )
-        )
-
-        self._levels_layout.insertWidget(
-            button_index,
-            combo,
-        )
-
-        self._level_combos.append(
-            combo
-        )
-
-    def _current_filter_path(
-        self,
-    ) -> list[str]:
-        """Return selected hierarchy path."""
-
-        path: list[str] = []
-
-        for combo in (
-            self._level_combos
-        ):
-            selected_key = (
-                combo.currentText()
-            )
-
-            if (
-                not selected_key
-                or selected_key
-                == LEVEL_PLACEHOLDER
-            ):
-                break
-
-            path.append(
-                selected_key
-            )
-
-        return path
-
-    def _on_level_changed(
-        self,
-        combo: QComboBox,
-    ) -> None:
-        """Handle hierarchy-level change."""
-
-        if (
-            combo
-            not in self._level_combos
-        ):
-            return
-
-        index = (
-            self._level_combos
-            .index(combo)
-        )
-
-        stale_combos = (
-            self._level_combos[
-                index + 1 :
-            ]
-        )
-
-        for stale_combo in (
-            stale_combos
-        ):
-            self._levels_layout.removeWidget(
-                stale_combo
-            )
-
-            stale_combo.deleteLater()
-
-        self._level_combos = (
-            self._level_combos[
-                : index + 1
-            ]
-        )
-
-        path = (
-            self._current_filter_path()
-        )
-
-        if (
-            len(path)
-            != index + 1
-        ):
-            return
-
-        if not self._has_payload:
-            return
-
-        next_keys = keys_at_path(
-            self._payload,
-            path,
-        )
-
-        if next_keys:
-            self._add_level_combo(
-                next_keys
-            )
-
-    def _show_filtered(
-        self,
-    ) -> None:
-        """Render selected filtered hierarchy."""
-
-        if not self._has_payload:
-            QMessageBox.information(
-                self,
-                MESSAGE_NO_JSON_TITLE,
-                MESSAGE_NO_JSON,
-            )
-
-            return
-
-        path = (
-            self._current_filter_path()
-        )
-
-        result = (
-            build_path_filtered_hierarchy_text(
-                self._payload,
-                path,
-            )
-        )
-
-        self._filtered_view.setPlainText(
-            result
-        )
+        for path_str in recent_files:
+            action = QAction(path_str, self)
+            action.triggered.connect(lambda _checked=False, p=path_str: self._open_recent_file(p))
+            self._recent_menu.addAction(action)
+
+        self._recent_menu.addSeparator()
+        clear_action = QAction("Clear Recently Opened", self)
+        clear_action.triggered.connect(self._clear_recent_files)
+        self._recent_menu.addAction(clear_action)
+
+    def _clear_recent_files(self) -> None:
+        self._workspace_state.clear_recent_files()
+        self._refresh_recent_menu()
+        self._welcome.set_recent_files([])
 
     # =================================================================
     # Saved Sessions
     # =================================================================
 
-    def _build_current_session(
-        self,
-    ) -> JsonifySession | None:
-        """Build session from current application state."""
+    def _open_session(self) -> None:
+        document = self._current_or_new_document()
+        document.open_session_dialog()
 
-        if not self._has_payload:
+    def _save_session(self) -> None:
+        document = self._current_document()
+        if document is not None:
+            document.save_session()
+
+    def _save_session_as(self) -> None:
+        document = self._current_document()
+        if document is not None:
+            document.save_session_as()
+
+    def open_paths(self, paths: list[Path]) -> None:
+        """Open several files (e.g. passed on the command line)."""
+
+        for path in paths:
+            self._open_path(path)
+
+    # =================================================================
+    # Batch, plugins, updates
+    # =================================================================
+
+    def _show_batch_dialog(self) -> None:
+        BatchDialog(self).exec()
+
+    def _show_plugins_dialog(self) -> None:
+        registry = get_registry()
+        lines = [f"Plugin folder: {data_dir() / 'plugins'}", ""]
+
+        if registry.loaded:
+            lines.append("Loaded:")
+            lines += [f"  - {name}" for name in registry.loaded]
+        else:
+            lines.append("No plugins loaded.")
+
+        provided = [
+            f"Converters: {', '.join(registry.converters) or '-'}",
+            f"Analyzers: {', '.join(registry.analyzers) or '-'}",
+            f"Tools: {', '.join(registry.tools) or '-'}",
+        ]
+        lines += ["", *provided]
+
+        if registry.errors:
+            lines += ["", "Errors:"]
+            lines += [f"  - {error}" for error in registry.errors]
+
+        QMessageBox.information(self, "Plugins", "\n".join(lines))
+
+    def _check_for_updates(self, *, manual: bool) -> None:
+        if self._update_worker is not None and self._update_worker.isRunning():
+            return
+
+        self._update_check_is_manual = manual
+        if manual:
+            self.statusBar().showMessage("Checking for updates...")
+
+        worker = _UpdateWorker(APP_VERSION, self)
+        worker.finished_with.connect(self._on_update_result)
+        worker.failed.connect(self._on_update_failed)
+        self._update_worker = worker
+        worker.start()
+
+    def _on_update_result(self, info: UpdateInfo) -> None:
+        if info.is_newer:
+            answer = QMessageBox.question(
+                self,
+                "Update Available",
+                f"Jsonify {info.latest_version} is available (you have {info.current_version}).\n\n"
+                f"{info.notes[:600]}\n\nOpen the download page?",
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                QDesktopServices.openUrl(QUrl(info.release_url))
+        elif self._update_check_is_manual:
             QMessageBox.information(
-                self,
-                MESSAGE_NO_JSON_TITLE,
-                MESSAGE_NO_JSON,
+                self, "Up to Date", f"You are running the latest version ({info.current_version})."
             )
-
-            return None
-
-        selected_tab = (
-            self._view_tabs.tabText(
-                self._view_tabs.currentIndex()
-            )
-        )
-
-        # Remove visual PRO suffix if present.
-
-        selected_tab = (
-            selected_tab
-            .replace(
-                "  PRO",
-                "",
-            )
-        )
-
-        jsonpath_query = ""
-
-        if hasattr(
-            self._jsonpath_view,
-            "get_query",
-        ):
-            jsonpath_query = (
-                self._jsonpath_view
-                .get_query()
-            )
-
-        name = "Untitled Session"
-
-        if (
-            self._current_session
-            is not None
-        ):
-            name = (
-                self._current_session.name
-            )
-
-        return (
-            self._session_service
-            .create_session(
-                name=name,
-                payload=self._payload,
-                selected_tab=selected_tab,
-                jsonpath_query=jsonpath_query,
-            )
-        )
-
-    def _save_session(
-        self,
-    ) -> None:
-        """Save current session."""
-
-        if not (
-            self._license_service
-            .has_feature(
-                Feature.SAVED_SESSIONS
-            )
-        ):
-            self._show_pro_required(
-                "Saved Sessions"
-            )
-
-            return
-
-        if (
-            self._current_session_path
-            is None
-        ):
-            self._save_session_as()
-
-            return
-
-        session = (
-            self._build_current_session()
-        )
-
-        if session is None:
-            return
-
-        if (
-            self._current_session
-            is not None
-        ):
-            session.name = (
-                self._current_session.name
-            )
-
-            session.created_at = (
-                self._current_session
-                .created_at
-            )
-
-        try:
-            saved_path = (
-                self._session_service
-                .save(
-                    session,
-                    self._current_session_path,
-                )
-            )
-
-        except SessionError as error:
-            QMessageBox.critical(
-                self,
-                "Save Session",
-                str(error),
-            )
-
-            return
-
-        self._current_session = (
-            session
-        )
-
-        self._current_session_path = (
-            saved_path
-        )
-
-        self.statusBar().showMessage(
-            (
-                "Session saved: "
-                f"{saved_path.name}"
-            ),
-            5000,
-        )
-
-    def _save_session_as(
-        self,
-    ) -> None:
-        """Save current session to a new file."""
-
-        if not (
-            self._license_service
-            .has_feature(
-                Feature.SAVED_SESSIONS
-            )
-        ):
-            self._show_pro_required(
-                "Saved Sessions"
-            )
-
-            return
-
-        session = (
-            self._build_current_session()
-        )
-
-        if session is None:
-            return
-
-        file_name, _ = (
-            QFileDialog.getSaveFileName(
-                self,
-                "Save Jsonify Session",
-                session.name,
-                (
-                    "Jsonify Session "
-                    "(*.jsonify)"
-                ),
-            )
-        )
-
-        if not file_name:
-            return
-
-        session_name = (
-            Path(file_name).stem
-        )
-
-        session.name = (
-            session_name
-            or "Untitled Session"
-        )
-
-        try:
-            saved_path = (
-                self._session_service
-                .save(
-                    session,
-                    file_name,
-                )
-            )
-
-        except SessionError as error:
-            QMessageBox.critical(
-                self,
-                "Save Session",
-                str(error),
-            )
-
-            return
-
-        self._current_session = (
-            session
-        )
-
-        self._current_session_path = (
-            saved_path
-        )
-
-        self.statusBar().showMessage(
-            (
-                "Session saved: "
-                f"{saved_path.name}"
-            ),
-            5000,
-        )
-
-    def _open_session(
-        self,
-    ) -> None:
-        """Open a Jsonify session."""
-
-        if not (
-            self._license_service
-            .has_feature(
-                Feature.SAVED_SESSIONS
-            )
-        ):
-            self._show_pro_required(
-                "Saved Sessions"
-            )
-
-            return
-
-        file_name, _ = (
-            QFileDialog.getOpenFileName(
-                self,
-                "Open Jsonify Session",
-                "",
-                (
-                    "Jsonify Session "
-                    "(*.jsonify)"
-                ),
-            )
-        )
-
-        if not file_name:
-            return
-
-        try:
-            session = (
-                self._session_service
-                .load(file_name)
-            )
-
-        except SessionError as error:
-            QMessageBox.critical(
-                self,
-                "Open Session",
-                str(error),
-            )
-
-            return
-
-        self._current_session = (
-            session
-        )
-
-        self._current_session_path = (
-            Path(file_name)
-        )
-
-        self._restore_session(
-            session
-        )
-
-    def _restore_session(
-        self,
-        session: JsonifySession,
-    ) -> None:
-        """Restore saved session."""
-
-        self._payload = (
-            session.payload
-        )
-
-        self._has_payload = True
-
-        self._document_count = 1
-
-        self._editor.setPlainText(
-            json.dumps(
-                session.payload,
-                indent=2,
-                ensure_ascii=False,
-            )
-        )
-
-        self._refresh_all_views()
-
-        if (
-            session.workspace
-            .jsonpath_query
-            and hasattr(
-                self._jsonpath_view,
-                "set_query",
-            )
-        ):
-            self._jsonpath_view.set_query(
-                session.workspace
-                .jsonpath_query
-            )
-
-        self._restore_selected_tab(
-            session.workspace
-            .selected_tab
-        )
-
-        self.statusBar().showMessage(
-            (
-                "Session loaded: "
-                f"{session.name}"
-            ),
-            5000,
-        )
-
-    def _restore_selected_tab(
-        self,
-        tab_name: str,
-    ) -> None:
-        """Restore selected tab by name."""
-
-        if not tab_name:
-            return
-
-        for index in range(
-            self._view_tabs.count()
-        ):
-            current_name = (
-                self._view_tabs
-                .tabText(index)
-                .replace(
-                    "  PRO",
-                    "",
-                )
-            )
-
-            if (
-                current_name
-                == tab_name
-            ):
-                if (
-                    self._view_tabs
-                    .isTabEnabled(index)
-                ):
-                    self._view_tabs.setCurrentIndex(
-                        index
-                    )
-
-                return
+        self.statusBar().clearMessage()
+
+    def _on_update_failed(self, message: str) -> None:
+        if self._update_check_is_manual:
+            QMessageBox.information(self, "Update Check", message)
+        self.statusBar().clearMessage()
 
     # =================================================================
-    # Licensing
+    # Crash recovery
     # =================================================================
 
-    def _load_saved_license(
-        self,
-    ) -> None:
-        """Load locally activated license."""
+    def _write_recovery_snapshot(self) -> None:
+        snapshot: list[dict[str, str | None]] = []
 
-        license_path = (
-            self._license_storage
-            .get_license_path()
-        )
-
-        if not license_path.exists():
-            return
-
-        try:
-            self._license_service.activate_file(
-                license_path
-            )
-
-        except (
-            LicenseError,
-            OSError,
-        ):
-            self._license_service.reset_to_free()
-
-    def _setup_licensed_features(
-        self,
-    ) -> None:
-        """Map Pro features to UI tabs."""
-
-        self._licensed_tabs: dict[
-            Feature,
-            tuple[QWidget, str],
-        ] = {
-            Feature.JSON_DIFF: (
-                self._diff_view,
-                "JSON Diff",
-            ),
-            Feature.JSONPATH: (
-                self._jsonpath_view,
-                "JSONPath",
-            ),
-            Feature.SCHEMA_VALIDATION: (
-                self._schema_view,
-                "Schema",
-            ),
-            Feature.DATA_MASKING: (
-                self._masking_view,
-                "Data Masking",
-            ),
-            Feature.API_VIEWER: (
-                self._api_view,
-                "API Viewer",
-            ),
-            Feature.EXPORT: (
-                self._export_view,
-                "Export",
-            ),
-        }
-
-    def _refresh_license_access(
-        self,
-    ) -> None:
-        """Refresh Free/Pro feature access."""
-
-        for (
-            feature,
-            (
-                widget,
-                base_name,
-            ),
-        ) in self._licensed_tabs.items():
-
-            index = (
-                self._view_tabs
-                .indexOf(widget)
-            )
-
-            if index < 0:
+        for index in range(self._doc_tabs.count()):
+            document = self._doc_tabs.widget(index)
+            if not isinstance(document, DocumentTab):
                 continue
 
-            allowed = (
-                self._license_service
-                .has_feature(feature)
+            text = document.editor_text()
+            if not text.strip():
+                continue
+
+            snapshot.append(
+                {
+                    "file_path": str(document.file_path) if document.file_path else None,
+                    "text": text,
+                }
             )
 
-            self._view_tabs.setTabEnabled(
-                index,
-                allowed,
-            )
+        if snapshot:
+            self._workspace_state.write_recovery_snapshot(snapshot)
+        else:
+            self._workspace_state.clear_recovery_snapshot()
 
-            if allowed:
-                tab_name = base_name
+    def _offer_crash_recovery(self) -> None:
+        snapshot = self._workspace_state.read_recovery_snapshot()
+        if not snapshot:
+            return
 
-            else:
-                tab_name = (
-                    f"{base_name}  PRO"
-                )
-
-            self._view_tabs.setTabText(
-                index,
-                tab_name,
-            )
-
-        # -------------------------------------------------------------
-        # Saved Sessions
-        # -------------------------------------------------------------
-
-        session_allowed = (
-            self._license_service
-            .has_feature(
-                Feature.SAVED_SESSIONS
-            )
-        )
-
-        self._save_session_action.setEnabled(
-            session_allowed
-        )
-
-        self._save_session_as_action.setEnabled(
-            session_allowed
-        )
-
-        self._open_session_action.setEnabled(
-            session_allowed
-        )
-
-        # -------------------------------------------------------------
-        # Advanced Graph
-        # -------------------------------------------------------------
-
-        advanced_graph_allowed = (
-            self._license_service
-            .has_feature(
-                Feature.ADVANCED_GRAPH
-            )
-        )
-
-        if hasattr(
-            self._graph_view,
-            "set_pro_features_enabled",
-        ):
-            self._graph_view.set_pro_features_enabled(
-                advanced_graph_allowed
-            )
-
-        # -------------------------------------------------------------
-        # License tab
-        # -------------------------------------------------------------
-
-        self._license_view.refresh()
-
-        license_info = (
-            self._license_service
-            .current_license
-        )
-
-        if license_info.is_pro:
-            self.statusBar().showMessage(
-                "Jsonify Pro activated",
-                3000,
-            )
-
-    def _show_license_tab(
-        self,
-    ) -> None:
-        """Open License tab."""
-
-        index = (
-            self._view_tabs
-            .indexOf(
-                self._license_view
-            )
-        )
-
-        if index >= 0:
-            self._view_tabs.setCurrentIndex(
-                index
-            )
-
-    def _show_pro_required(
-        self,
-        feature_name: str,
-    ) -> None:
-        """Inform user that a feature requires Pro."""
-
-        result = QMessageBox.information(
+        count = len(snapshot)
+        result = QMessageBox.question(
             self,
-            "Jsonify Pro",
+            "Restore Previous Session",
             (
-                f"{feature_name} is available "
-                "with Jsonify Pro.\n\n"
-                "Open the License tab to "
-                "activate a Pro license."
+                f"Jsonify did not close normally. Restore {count} unsaved "
+                f"document{'s' if count != 1 else ''} from before it closed?"
             ),
-            (
-                QMessageBox.StandardButton.Ok
-            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
 
-        _ = result
+        if result == QMessageBox.StandardButton.Yes:
+            for entry in snapshot:
+                document = self.new_document()
+                document.load_text(str(entry.get("text", "")))
+                file_path = entry.get("file_path")
+                if file_path:
+                    document.file_path = Path(str(file_path))
+
+        self._workspace_state.clear_recovery_snapshot()
 
     # =================================================================
     # Close
     # =================================================================
 
-    def closeEvent(
-        self,
-        event,
-    ) -> None:
+    def closeEvent(self, event) -> None:
         """Handle application close."""
 
+        self._workspace_state.clear_recovery_snapshot()
         event.accept()
