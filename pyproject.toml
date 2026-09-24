@@ -18,7 +18,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jsonify"
-version = "1.0.0"
+version = "3.0.0"
 description = "Desktop application for exploring and visualizing JSON payloads"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName "Jsonify"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "3.0.0"
 #define MyAppPublisher "Jsonify"
 #define MyAppExeName "Jsonify.exe"
 
