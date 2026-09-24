@@ -65,6 +65,7 @@ from jsonify.ui.constants import (
     MONOSPACE_FONT,
 )
 from jsonify.ui.widgets.advanced_graph_view import AdvancedGraphView
+from jsonify.ui.widgets.ai_view import AiView
 from jsonify.ui.widgets.api_view import ApiView
 from jsonify.ui.widgets.code_editor import CodeEditor
 from jsonify.ui.widgets.codegen_view import CodeGenView
@@ -484,6 +485,11 @@ class DocumentTab(QWidget):
         self._devtools_view = DevToolsView()
         self._add_activity_category(
             "tools", "Tools", "JWT, Base64, escape, timestamp, UUID, hash", self._devtools_view
+        )
+
+        self._ai_view = AiView()
+        self._add_activity_category(
+            "ai", "AI", "Optional bring-your-own-endpoint AI assistant", self._ai_view
         )
 
         self._select_category("json")
@@ -1130,6 +1136,7 @@ class DocumentTab(QWidget):
         self._converters_view.set_payload(payload)
         self._codegen_view.set_payload(payload)
         self._masking_view.set_payload(payload)
+        self._ai_view.set_payload(payload)
         self._refresh_export_view(payload)
         self._refresh_payload_status(payload)
         self._refresh_table_view(payload)
