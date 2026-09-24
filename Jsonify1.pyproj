@@ -122,6 +122,7 @@
     <Compile Include="tests\__init__.py" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="assets\" />
     <Folder Include="tests\" />
     <Folder Include="src\" />
     <Folder Include="src\jsonify\" />

@@ -296,5 +296,6 @@ api_workspace.json
 #
 # src/jsonify/resources/d3.min.js
 # src/jsonify/resources/jsonify.png
+# assets/jsonify.ico            (Jsonify.spec / installer/Jsonify.iss icon)
 #
 # ============================================================

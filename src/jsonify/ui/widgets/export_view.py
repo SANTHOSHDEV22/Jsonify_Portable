@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from jsonify.core.converters import ConversionError, json_to_csv
+from jsonify.core.converters import ConversionError, json_to_csv, json_to_yaml
 from jsonify.core.models import JSONValue
 from jsonify.core.sensitive import safe_mask
 from jsonify.services.export_service import ExportError, ExportService
@@ -73,6 +73,7 @@ class ExportView(QWidget):
         self._export_type.addItem("Masked JSON", "masked_json")
         self._export_type.addItem("Safe JSON (auto-mask detected data)", "safe_json")
         self._export_type.addItem("CSV (array of objects)", "csv")
+        self._export_type.addItem("YAML", "yaml")
         self._export_type.addItem("Graph SVG", "svg")
         self._export_type.addItem("Graph PNG", "png")
         self._export_type.addItem("Graph PDF", "pdf")
@@ -147,9 +148,10 @@ class ExportView(QWidget):
             self._preview.clear()
             return
 
-        if export_type == "csv":
+        if export_type in ("csv", "yaml"):
+            converter = json_to_csv if export_type == "csv" else json_to_yaml
             try:
-                self._preview.setPlainText(json_to_csv(payload))
+                self._preview.setPlainText(converter(payload))
             except ConversionError as error:
                 self._preview.setPlainText(str(error))
             return
@@ -181,6 +183,10 @@ class ExportView(QWidget):
 
         if export_type == "csv":
             self._export_csv()
+            return
+
+        if export_type == "yaml":
+            self._export_yaml()
             return
 
         if export_type in {"svg", "png", "pdf"}:
@@ -344,6 +350,26 @@ class ExportView(QWidget):
 
         try:
             self._export_service.export_text(content, file_path, extension="csv")
+            path = self._verify_export(file_path)
+        except (ExportError, OSError) as error:
+            self._show_error(error)
+            return
+
+        self._status_label.setText(f"Exported successfully: {path}")
+
+    def _export_yaml(self) -> None:
+        """Export the loaded JSON as YAML."""
+
+        if self._payload is None:
+            QMessageBox.warning(self, "Export", "Load JSON before exporting.")
+            return
+
+        file_path = self._downloads_path("jsonify_export", "yaml")
+
+        try:
+            self._export_service.export_text(
+                json_to_yaml(self._payload), file_path, extension="yaml"
+            )
             path = self._verify_export(file_path)
         except (ExportError, OSError) as error:
             self._show_error(error)

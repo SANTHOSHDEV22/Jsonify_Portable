@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QTableWidget,
@@ -190,6 +191,7 @@ class DocumentTab(QWidget):
 
         format_button = QToolButton()
         format_button.setText("Format ▾")
+        format_button.setStyleSheet("QToolButton::menu-indicator { image: none; }")
         format_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 
         format_menu = QMenu(format_button)
@@ -251,18 +253,28 @@ class DocumentTab(QWidget):
             self._diff_view.set_new_text(text)
         self._select_category("diff")
 
-    def _on_api_response_loaded(self, payload: JSONValue) -> None:
+    def _send_payload_to_viewer(self, payload: JSONValue) -> None:
+        """Load ``payload`` into this document's editor (from an API
+        response, a converter, or a jq/JSONPath result)."""
+
         self._editor.setPlainText(beautify(payload, indent=2))
         self._load_json()
         self._select_category("json")
+
+    def _on_api_response_loaded(self, payload: JSONValue) -> None:
+        self._send_payload_to_viewer(payload)
 
     def _on_masked_payload_changed(self, payload: JSONValue | None) -> None:
         self._export_view.set_masked_payload(payload)
 
     def _on_converted_payload_loaded(self, payload: JSONValue) -> None:
-        self._editor.setPlainText(beautify(payload, indent=2))
-        self._load_json()
-        self._select_category("json")
+        self._send_payload_to_viewer(payload)
+
+    def _send_text_to_request_body(self, text: str) -> None:
+        """Put jq/JSONPath result text into the API client's JSON body."""
+
+        self._api_view.set_json_body(text)
+        self._select_category("api")
 
     # =================================================================
     # Formatter
@@ -431,9 +443,13 @@ class DocumentTab(QWidget):
         self._add_activity_category("diff", "Diff", "JSON Diff", self._diff_view)
 
         self._jsonpath_view = JsonPathView()
+        self._jsonpath_view.send_to_viewer.connect(self._send_payload_to_viewer)
+        self._jsonpath_view.send_to_request_body.connect(self._send_text_to_request_body)
         self._add_activity_category("query", "Query", "JSONPath", self._jsonpath_view)
 
         self._jq_view = JqView()
+        self._jq_view.send_to_viewer.connect(self._send_payload_to_viewer)
+        self._jq_view.send_to_request_body.connect(self._send_text_to_request_body)
         self._add_activity_category("jq", "jq", "jq-lite query", self._jq_view)
 
         self._schema_view = SchemaView()
@@ -483,6 +499,7 @@ class DocumentTab(QWidget):
         button.setToolTip(tooltip)
         button.setCheckable(True)
         button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self._activity_group.addButton(button)
         # Insert before the trailing stretch so buttons stack top-down.

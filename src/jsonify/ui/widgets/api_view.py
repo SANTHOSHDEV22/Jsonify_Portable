@@ -43,6 +43,7 @@ from jsonify.services.api_service import (
 )
 from jsonify.services.api_workspace_service import ApiWorkspaceService
 from jsonify.ui.constants import MONOSPACE_FONT
+from jsonify.ui.widgets.lazy_tree_view import LazyJsonTreeView
 
 _AUTH_LABELS = {
     "none": "No Auth",
@@ -56,46 +57,147 @@ _BODY_LABELS = {"none": "None", "json": "JSON", "form": "Form (urlencoded)"}
 _CODE_LABELS = {"python": "Python", "javascript": "JavaScript", "csharp": "C#", "java": "Java"}
 
 
-class _KeyValueTable(QWidget):
-    """A small editable two-column table with an "add row" button."""
+_SENSITIVE_HEADER_HINTS = ("authorization", "api-key", "apikey", "x-api-key", "cookie", "token")
 
-    def __init__(self, headers: tuple[str, str], parent: QWidget | None = None) -> None:
+
+class _KeyValueTable(QWidget):
+    """An editable two-column table: enable/disable, add, remove, and (for
+    headers) mask sensitive-looking values until revealed."""
+
+    def __init__(
+        self,
+        headers: tuple[str, str],
+        parent: QWidget | None = None,
+        *,
+        mask_sensitive_values: bool = False,
+    ) -> None:
         super().__init__(parent)
+
+        self._mask_sensitive_values = mask_sensitive_values
+        self._revealed = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._table = QTableWidget(0, 2)
-        self._table.setHorizontalHeaderLabels(list(headers))
-        header = self._table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self._table = QTableWidget(0, 3)
+        self._table.setHorizontalHeaderLabels(["", *headers])
+        header_view = self._table.horizontalHeader()
+        header_view.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header_view.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header_view.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self._table.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self._table)
 
+        buttons = QHBoxLayout()
         add_button = QPushButton("+ Add Row")
-        add_button.clicked.connect(lambda: self._table.insertRow(self._table.rowCount()))
-        layout.addWidget(add_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        add_button.clicked.connect(lambda: self._insert_row("", "", enabled=True))
+        buttons.addWidget(add_button)
+
+        remove_button = QPushButton("Remove Selected")
+        remove_button.clicked.connect(self._remove_selected)
+        buttons.addWidget(remove_button)
+
+        if mask_sensitive_values:
+            self._reveal_button = QPushButton("Show Values")
+            self._reveal_button.setCheckable(True)
+            self._reveal_button.toggled.connect(self._set_revealed)
+            buttons.addWidget(self._reveal_button)
+
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
 
         self.set_pairs([])
 
-    def set_pairs(self, pairs: list[tuple[str, str]]) -> None:
-        self._table.setRowCount(0)
-        for key, value in pairs:
-            row = self._table.rowCount()
-            self._table.insertRow(row)
-            self._table.setItem(row, 0, QTableWidgetItem(key))
-            self._table.setItem(row, 1, QTableWidgetItem(value))
-        while self._table.rowCount() < 3:
-            self._table.insertRow(self._table.rowCount())
+    def _insert_row(self, key: str, value: str, *, enabled: bool) -> None:
+        row = self._table.rowCount()
+        self._table.insertRow(row)
 
-    def pairs(self) -> list[tuple[str, str]]:
+        check_item = QTableWidgetItem()
+        check_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+        check_item.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+        self._table.setItem(row, 0, check_item)
+
+        self._table.setItem(row, 1, QTableWidgetItem(key))
+        self._table.setItem(row, 2, QTableWidgetItem(self._display_value(key, value)))
+        self._table.item(row, 2).setData(Qt.ItemDataRole.UserRole, value)
+
+    def _display_value(self, key: str, value: str) -> str:
+        if self._mask_sensitive_values and not self._revealed and self._is_sensitive(key):
+            return "•" * max(8, min(len(value), 24))
+        return value
+
+    @staticmethod
+    def _is_sensitive(key: str) -> bool:
+        lowered = key.strip().casefold()
+        return any(hint in lowered for hint in _SENSITIVE_HEADER_HINTS)
+
+    def _on_item_changed(self, item: QTableWidgetItem) -> None:
+        if item.column() != 2 or self._revealed or not self._mask_sensitive_values:
+            return
+        # The user edited a (possibly masked) value cell directly: treat the
+        # typed text as the new real value.
+        item.setData(Qt.ItemDataRole.UserRole, item.text())
+
+    def _set_revealed(self, revealed: bool) -> None:
+        self._revealed = revealed
+        self._reveal_button.setText("Hide Values" if revealed else "Show Values")
+        self._rebuild(self._all_rows())
+
+    def _all_rows(self) -> list[tuple[str, str, bool]]:
+        """Every row (including disabled ones) as (key, real value, enabled)."""
+
+        rows: list[tuple[str, str, bool]] = []
+        for row in range(self._table.rowCount()):
+            check_item = self._table.item(row, 0)
+            key_item = self._table.item(row, 1)
+            value_item = self._table.item(row, 2)
+
+            key = key_item.text().strip() if key_item else ""
+            real_value = value_item.data(Qt.ItemDataRole.UserRole) if value_item else None
+            value = (
+                real_value if real_value is not None else (value_item.text() if value_item else "")
+            )
+            enabled = check_item is not None and check_item.checkState() == Qt.CheckState.Checked
+
+            rows.append((key, value, enabled))
+        return rows
+
+    def _remove_selected(self) -> None:
+        for row in sorted({index.row() for index in self._table.selectedIndexes()}, reverse=True):
+            self._table.removeRow(row)
+
+    def set_pairs(self, pairs: list[tuple[str, str]]) -> None:
+        self._rebuild([(key, value, True) for key, value in pairs])
+
+    def _rebuild(self, rows: list[tuple[str, str, bool]]) -> None:
+        self._table.blockSignals(True)
+        self._table.setRowCount(0)
+        for key, value, enabled in rows:
+            self._insert_row(key, value, enabled=enabled)
+        while self._table.rowCount() < 3:
+            self._insert_row("", "", enabled=True)
+        self._table.blockSignals(False)
+
+    def pairs(self, *, include_disabled: bool = False) -> list[tuple[str, str]]:
         result: list[tuple[str, str]] = []
         for row in range(self._table.rowCount()):
-            key_item = self._table.item(row, 0)
-            value_item = self._table.item(row, 1)
+            check_item = self._table.item(row, 0)
+            if not include_disabled and (
+                check_item is None or check_item.checkState() != Qt.CheckState.Checked
+            ):
+                continue
+
+            key_item = self._table.item(row, 1)
+            value_item = self._table.item(row, 2)
             key = key_item.text().strip() if key_item else ""
-            if key:
-                result.append((key, value_item.text() if value_item else ""))
+            if not key:
+                continue
+
+            real_value = value_item.data(Qt.ItemDataRole.UserRole) if value_item else None
+            value = (
+                real_value if real_value is not None else (value_item.text() if value_item else "")
+            )
+            result.append((key, value))
         return result
 
 
@@ -321,7 +423,7 @@ class ApiView(QWidget):
         self._params_table = _KeyValueTable(("Parameter", "Value"))
         tabs.addTab(self._params_table, "Params")
 
-        self._headers_table = _KeyValueTable(("Header", "Value"))
+        self._headers_table = _KeyValueTable(("Header", "Value"), mask_sensitive_values=True)
         tabs.addTab(self._headers_table, "Headers")
 
         tabs.addTab(self._create_auth_tab(), "Auth")
@@ -402,11 +504,17 @@ class ApiView(QWidget):
     def _create_response_tabs(self) -> QTabWidget:
         tabs = QTabWidget()
 
+        # Reuses the same lazy tree used for loaded documents, rather than a
+        # second JSON viewer, so a response gets the exact same expand /
+        # collapse / copy-path / copy-pointer tooling.
+        self._response_tree = LazyJsonTreeView()
+        tabs.addTab(self._response_tree, "Response (Tree)")
+
         self._response_body = QPlainTextEdit()
         self._response_body.setReadOnly(True)
         self._response_body.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self._response_body.setFont(QFont(MONOSPACE_FONT))
-        tabs.addTab(self._response_body, "Response Body")
+        tabs.addTab(self._response_body, "Response (Raw)")
 
         self._response_headers = QPlainTextEdit()
         self._response_headers.setReadOnly(True)
@@ -488,6 +596,12 @@ class ApiView(QWidget):
             form_fields=self._form_table.pairs(),
         )
 
+    def set_json_body(self, text: str) -> None:
+        """Put ``text`` into the JSON request body (e.g. from jq/JSONPath)."""
+
+        self._body_combo.setCurrentIndex(_BODY_KINDS.index("json"))
+        self._body_editor.setPlainText(text)
+
     def load_request(self, request: ApiRequest) -> None:
         """Populate the UI from a saved/imported request."""
 
@@ -552,8 +666,10 @@ class ApiView(QWidget):
     def _display_response(self, response: ApiResponse) -> None:
         if response.is_json and response.json_data is not None:
             body_text = json.dumps(response.json_data, indent=2, ensure_ascii=False)
+            self._response_tree.set_payload(response.json_data)
         else:
             body_text = response.text
+            self._response_tree.clear_payload()
 
         self._response_body.setPlainText(body_text)
         self._response_headers.setPlainText(
@@ -702,10 +818,37 @@ class ApiView(QWidget):
         self._refresh_history()
 
     def _refresh_collections(self) -> None:
+        """Rebuild the collections tree.
+
+        A collection name containing ``/`` (e.g. ``E-Commerce/Users``) is
+        shown as nested folders rather than one flat entry, so requests can
+        be grouped the same way a Postman-style collection would be.
+        """
+
         self._collections_tree.clear()
+        folder_items: dict[tuple[str, ...], QTreeWidgetItem] = {}
+
+        def folder_for(parts: tuple[str, ...]) -> QTreeWidgetItem | None:
+            if not parts:
+                return None
+            if parts in folder_items:
+                return folder_items[parts]
+
+            parent_widget = folder_for(parts[:-1])
+            item = QTreeWidgetItem([parts[-1]])
+            item.setData(0, Qt.ItemDataRole.UserRole, {"collection": "/".join(parts)})
+            if parent_widget is None:
+                self._collections_tree.addTopLevelItem(item)
+            else:
+                parent_widget.addChild(item)
+            item.setExpanded(True)
+            folder_items[parts] = item
+            return item
+
         for collection, items in sorted(self._workspace.get_collections().items()):
-            parent = QTreeWidgetItem([collection])
-            parent.setData(0, Qt.ItemDataRole.UserRole, {"collection": collection})
+            parts = tuple(p for p in collection.split("/") if p)
+            parent = folder_for(parts) if parts else folder_for(("(unnamed)",))
+
             for saved in items:
                 child = QTreeWidgetItem([str(saved.get("name", "request"))])
                 child.setData(
@@ -717,9 +860,10 @@ class ApiView(QWidget):
                         "request": saved.get("request"),
                     },
                 )
-                parent.addChild(child)
-            self._collections_tree.addTopLevelItem(parent)
-            parent.setExpanded(True)
+                if parent is None:
+                    self._collections_tree.addTopLevelItem(child)
+                else:
+                    parent.addChild(child)
 
     def _save_to_collection(self) -> None:
         existing = sorted(self._workspace.get_collections())
@@ -727,13 +871,15 @@ class ApiView(QWidget):
             collection, ok = QInputDialog.getItem(
                 self,
                 "Save to Collection",
-                "Collection (type a new name to create one):",
+                "Collection (use 'Folder/Subfolder' to nest; type a new name to create one):",
                 existing,
                 0,
                 True,
             )
         else:
-            collection, ok = QInputDialog.getText(self, "Save to Collection", "Collection name:")
+            collection, ok = QInputDialog.getText(
+                self, "Save to Collection", "Collection name (use 'Folder/Subfolder' to nest):"
+            )
         if not ok or not collection.strip():
             return
 
@@ -770,6 +916,7 @@ class ApiView(QWidget):
         self.load_request(ApiRequest())
         self._response_body.clear()
         self._response_headers.clear()
+        self._response_tree.clear_payload()
         self._response = None
         self._load_button.setEnabled(False)
         self._diff_old_button.setEnabled(False)

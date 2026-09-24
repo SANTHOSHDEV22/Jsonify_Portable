@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -31,6 +32,11 @@ from jsonify.ui.constants import MONOSPACE_FONT
 
 class JsonPathView(QWidget):
     """Widget for executing JSONPath queries."""
+
+    send_to_viewer = Signal(object)
+    """Emitted with a value when "Send to Viewer" is clicked."""
+    send_to_request_body = Signal(str)
+    """Emitted with a value as JSON text when "Send to Request Body" is clicked."""
 
     _EXAMPLES = (
         "$",
@@ -181,6 +187,16 @@ class JsonPathView(QWidget):
         copy_all_button = QPushButton("Copy All Results (JSON)")
         copy_all_button.clicked.connect(self._copy_all_results)
         value_row.addWidget(copy_all_button)
+
+        send_viewer_button = QPushButton("Send to Viewer")
+        send_viewer_button.setToolTip("Load the selected value back into this document's editor")
+        send_viewer_button.clicked.connect(self._send_to_viewer)
+        value_row.addWidget(send_viewer_button)
+
+        send_body_button = QPushButton("Send to Request Body")
+        send_body_button.setToolTip("Use the selected value as the API client's JSON request body")
+        send_body_button.clicked.connect(self._send_to_request_body)
+        value_row.addWidget(send_body_button)
 
         layout.addLayout(value_row)
 
@@ -371,6 +387,27 @@ class JsonPathView(QWidget):
             return
         payload = [{"path": r.path, "value": r.value} for r in self._results]
         QApplication.clipboard().setText(json.dumps(payload, indent=2, ensure_ascii=False))
+
+    def _selected_value(self) -> tuple[bool, JSONValue]:
+        """Return (has_value, value) for the current selection, or all
+        results (as a list) if nothing specific is selected."""
+
+        row = self._selected_row()
+        if row is not None and row < len(self._results):
+            return True, self._results[row].value
+        if self._results:
+            return True, [r.value for r in self._results]
+        return False, None
+
+    def _send_to_viewer(self) -> None:
+        has_value, value = self._selected_value()
+        if has_value:
+            self.send_to_viewer.emit(value)
+
+    def _send_to_request_body(self) -> None:
+        has_value, value = self._selected_value()
+        if has_value:
+            self.send_to_request_body.emit(json.dumps(value, indent=2, ensure_ascii=False))
 
     @staticmethod
     def _display_value(

@@ -33,6 +33,7 @@ _API_KEY_PATTERNS = (
 
 _PHONE_KEY_HINTS = ("phone", "mobile", "tel", "fax")
 _PASSWORD_KEYS = {"password", "passwd", "pwd"}
+_CARD_CANDIDATE = re.compile(r"^[\d](?:[\d -]{10,22})[\d]$")
 
 CATEGORIES = (
     "email",
@@ -40,6 +41,7 @@ CATEGORIES = (
     "jwt",
     "api_key",
     "connection_string",
+    "credit_card",
     "password",
     "token",
     "secret",
@@ -140,6 +142,9 @@ def _classify(value: JSONValue, key: str | None) -> tuple[str, str, MaskType] | 
         if _EMAIL.fullmatch(text):
             return "email", "value pattern", MaskType.EMAIL
 
+        if _looks_like_credit_card(text):
+            return "credit_card", "value pattern", MaskType.PARTIAL
+
         if _looks_like_phone(text, lowered_key):
             return "phone", "value pattern", MaskType.PARTIAL
 
@@ -170,3 +175,26 @@ def _looks_like_phone(text: str, lowered_key: str) -> bool:
 
 def _looks_like_date(text: str) -> bool:
     return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?", text))
+
+
+def _looks_like_credit_card(text: str) -> bool:
+    if not _CARD_CANDIDATE.match(text):
+        return False
+
+    digits = re.sub(r"[ -]", "", text)
+    if not 13 <= len(digits) <= 19 or not digits.isdigit():
+        return False
+
+    return _passes_luhn(digits)
+
+
+def _passes_luhn(digits: str) -> bool:
+    total = 0
+    for index, char in enumerate(reversed(digits)):
+        value = int(char)
+        if index % 2 == 1:
+            value *= 2
+            if value > 9:
+                value -= 9
+        total += value
+    return total % 10 == 0

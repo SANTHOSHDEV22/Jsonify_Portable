@@ -21,6 +21,8 @@ AppVerName={#MyAppName} {#MyAppVersion}
 
 AppPublisher={#MyAppPublisher}
 
+SetupIconFile=..\assets\jsonify.ico
+
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 

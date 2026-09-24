@@ -59,6 +59,25 @@ def test_detects_connection_strings() -> None:
     assert len(_categories(payload)) == 2
 
 
+def test_detects_credit_card_numbers() -> None:
+    payload = {"card": "4111 1111 1111 1111", "card2": "4111111111111111"}
+
+    assert _categories(payload) == {"$.card": "credit_card", "$.card2": "credit_card"}
+
+
+def test_does_not_flag_random_digit_strings_as_credit_card() -> None:
+    # 16 digits but fails the Luhn check.
+    assert _categories({"n": "1234567812345678"}) == {}
+
+
+def test_credit_card_masking_keeps_some_digits_visible() -> None:
+    masked, findings = safe_mask({"card": "4111 1111 1111 1111"})
+
+    assert findings[0].category == "credit_card"
+    assert masked["card"] != "4111 1111 1111 1111"
+    assert masked["card"][:2] == "41"
+
+
 def test_detects_by_key_name() -> None:
     result = _categories({"password": "x", "token": "y", "client_secret": "z"})
 

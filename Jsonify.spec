@@ -14,6 +14,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 project_root = Path(SPECPATH)
+icon_file = project_root / "assets" / "jsonify.ico"
 src_dir = project_root / "src"
 
 
@@ -67,6 +68,7 @@ gui_exe = EXE(
     [],
     exclude_binaries=True,
     name="Jsonify",
+    icon=str(icon_file),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

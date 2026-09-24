@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -25,6 +26,11 @@ from jsonify.ui.constants import MONOSPACE_FONT
 class JqView(QWidget):
     """Widget for running jq-lite queries against the loaded JSON payload."""
 
+    send_to_viewer = Signal(object)
+    """Emitted with the result value when "Send to Viewer" is clicked."""
+    send_to_request_body = Signal(str)
+    """Emitted with the result as JSON text when "Send to Request Body" is clicked."""
+
     _EXAMPLES = (
         ".",
         ".users[]",
@@ -39,6 +45,7 @@ class JqView(QWidget):
         super().__init__(parent)
 
         self._payload: JSONValue | None = None
+        self._last_result: list[JSONValue] | None = None
 
         self._setup_ui()
 
@@ -78,6 +85,21 @@ class JqView(QWidget):
         query_row.addWidget(copy_button)
 
         layout.addLayout(query_row)
+
+        send_row = QHBoxLayout()
+        send_row.addStretch(1)
+
+        send_viewer_button = QPushButton("Send to Viewer")
+        send_viewer_button.setToolTip("Load the result back into this document's editor")
+        send_viewer_button.clicked.connect(self._send_to_viewer)
+        send_row.addWidget(send_viewer_button)
+
+        send_body_button = QPushButton("Send to Request Body")
+        send_body_button.setToolTip("Use the result as the API client's JSON request body")
+        send_body_button.clicked.connect(self._send_to_request_body)
+        send_row.addWidget(send_body_button)
+
+        layout.addLayout(send_row)
 
         self._status_label = QLabel("Load a JSON payload to begin.")
         layout.addWidget(self._status_label)
@@ -122,8 +144,16 @@ class JqView(QWidget):
             return
 
         self._remember_query(query)
+        self._last_result = results
         self._output.setPlainText(json.dumps(results, indent=2, ensure_ascii=False))
         self._status_label.setText(f"{len(results)} result(s).")
+
+    def _result_value(self) -> JSONValue:
+        """A single-item result is unwrapped so it drops straight into the
+        viewer or a request body instead of arriving wrapped in a list."""
+
+        results = self._last_result or []
+        return results[0] if len(results) == 1 else results
 
     def _remember_query(self, query: str) -> None:
         existing_index = self._query_combo.findText(query)
@@ -136,3 +166,13 @@ class JqView(QWidget):
         text = self._output.toPlainText()
         if text:
             QApplication.clipboard().setText(text)
+
+    def _send_to_viewer(self) -> None:
+        if self._last_result is not None:
+            self.send_to_viewer.emit(self._result_value())
+
+    def _send_to_request_body(self) -> None:
+        if self._last_result is not None:
+            self.send_to_request_body.emit(
+                json.dumps(self._result_value(), indent=2, ensure_ascii=False)
+            )
